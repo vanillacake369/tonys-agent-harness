@@ -16,9 +16,9 @@ repo_real=$(cd "$REPO" && pwd -P)
 receipt_dir=$(cd "$(dirname "$RECEIPT")" && pwd -P)
 receipt_real="$receipt_dir/$(basename "$RECEIPT")"
 case "$receipt_real" in "$repo_real"|"$repo_real"/*) echo "approval gate: receipt must be outside repository" >&2; exit 2;; esac
-mode=$(stat -f '%Lp' "$receipt_real" 2>/dev/null || stat -c '%a' "$receipt_real" 2>/dev/null || true)
+mode=$(stat -c '%a' "$receipt_real" 2>/dev/null || stat -f '%Lp' "$receipt_real" 2>/dev/null || true)
 [[ "$mode" == 600 || "$mode" == 400 ]] || { echo "approval gate: receipt must be private and immutable to peers" >&2; exit 2; }
-owner=$(stat -f '%u' "$receipt_real" 2>/dev/null || stat -c '%u' "$receipt_real")
+owner=$(stat -c '%u' "$receipt_real" 2>/dev/null || stat -f '%u' "$receipt_real")
 [[ "$owner" == "$(id -u)" ]] || { echo "approval gate: receipt owner mismatch" >&2; exit 2; }
 "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/receipt-signature-gate.sh" "$receipt_real" >/dev/null
 if ! jq -e --arg digest "$DIGEST" --arg action "$ACTION" --arg environment "$ENVIRONMENT" '

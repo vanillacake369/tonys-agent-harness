@@ -21,7 +21,7 @@ digest=$(printf '%s' "$normalized" | shasum -a 256 | awk '{print $1}')
 repo_real=$(cd "$REPO" 2>/dev/null && pwd -P || { mkdir -p "$REPO" && cd "$REPO" && pwd -P; })
 receipt_real=$(cd "$(dirname "$RECEIPT")" && pwd -P)/$(basename "$RECEIPT")
 case "$receipt_real" in "$repo_real"|"$repo_real"/*) echo "test review gate: receipt must be external" >&2; exit 2;; esac
-mode=$(stat -f '%Lp' "$receipt_real" 2>/dev/null || stat -c '%a' "$receipt_real" 2>/dev/null || true)
+mode=$(stat -c '%a' "$receipt_real" 2>/dev/null || stat -f '%Lp' "$receipt_real" 2>/dev/null || true)
 [[ "$mode" == 600 || "$mode" == 400 ]] || { echo "test review gate: private receipt required" >&2; exit 2; }
 env -u AGENT_APPROVAL_PUBLIC_KEY AGENT_APPROVAL_PUBLIC_KEY="$TRUSTED_KEY" \
   "$ROOT/receipt-signature-gate.sh" "$receipt_real" >/dev/null
