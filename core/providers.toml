@@ -1,0 +1,25 @@
+schema_version = 1
+
+[codex]
+instruction = "adapted"
+sandbox = "supported"
+hooks = "adapted"
+skills = "supported"
+
+[claude]
+instruction = "supported"
+sandbox = "supported"
+hooks = "supported"
+skills = "supported"
+
+[gemini]
+instruction = "supported"
+sandbox = "adapted"
+hooks = "adapted"
+skills = "adapted"
+
+[kiro]
+instruction = "adapted"
+sandbox = "adapted"
+hooks = "supported"
+skills = "supported"

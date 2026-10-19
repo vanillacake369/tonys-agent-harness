@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+build/agent-harness/
+*.approval.json
+*.receipt.json
+.env
+.env.*
+secrets/
+credentials/
+*.pem
+*.key
+result
+result-*
+.DS_Store

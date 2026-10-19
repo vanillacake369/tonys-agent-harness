@@ -1,0 +1,223 @@
+{
+  "env": {
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "CLI_PROXY_URL": "http://127.0.0.1:4001"
+  },
+  "includeCoAuthoredBy": false,
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": false
+  },
+  "permissions": {
+    "allow": [
+      "Read(*)",
+      "Glob(*)",
+      "Grep(*)",
+      "LS(*)",
+      "WebFetch(*)",
+      "WebSearch(*)",
+      "Edit(*)",
+      "Write(*)",
+      "NotebookEdit(*)",
+      "Task(*)",
+      "Workflow(*)",
+      "TaskCreate(*)",
+      "TaskGet(*)",
+      "TaskList(*)",
+      "TaskOutput(*)",
+      "TaskStop(*)",
+      "TaskUpdate(*)",
+      "Bash(*)",
+      "mcp__context7",
+      "mcp__playwright"
+    ],
+    "deny": [
+      "Agent(general-purpose)"
+    ],
+    "ask": [],
+    "disableBypassPermissionsMode": "disable"
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/hooks/statusline.sh",
+    "padding": 1
+  },
+  "subagentStatusLine": {
+    "type": "command",
+    "command": "~/.claude/hooks/subagent-statusline.sh"
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.config/agents/governance/task-lifecycle.py start",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/complexity-router.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.config/agents/governance/mcp-hook.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Write|Edit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.config/agents/governance/path-guard.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.config/agents/governance/retry-hook.sh pre",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/cmd-guard.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "~/.config/agents/governance/path-guard.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/branch-guard.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/cost-gate.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/agent-notify.sh claude",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+  "PostToolUse": [
+      {
+        "matcher": "mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.config/agents/governance/mcp-hook.sh post",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/proxy-route.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.config/agents/governance/retry-hook.sh post",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/test-feedback.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Write|Edit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.config/agents/governance/retry-hook.sh post",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/auto-lint.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/semantic-oracle.sh",
+            "timeout": 90
+          }
+        ]
+      }
+  ],
+  "PostToolUseFailure": [
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "bash ~/.config/agents/governance/retry-hook.sh failure",
+          "timeout": 5
+        }
+      ]
+    }
+  ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.config/agents/governance/task-lifecycle.py stop",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/agent-notify.sh claude",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

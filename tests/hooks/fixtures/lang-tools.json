@@ -1,0 +1,8 @@
+{
+  "prob": {"format": "grep PROBLEM"},
+  "both": {"format": "grep PROBLEM", "lint": "grep WARN"},
+  "ok": {"diagnose": "true"},
+  "bad": {"diagnose": "false"},
+  "miss": {"diagnose": "nonexistent-cmd-xyz123"},
+  "nd": {}
+}

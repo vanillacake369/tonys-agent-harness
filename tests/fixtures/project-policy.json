@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "layers": {
+    "global-policy": {
+      "priority": 100,
+      "can_weaken": false,
+      "deny": ["secret_access", "implicit_production_change"]
+    },
+    "project-policy": {
+      "priority": 90,
+      "can_weaken": false,
+      "allow": ["read_repository", "local_tests", "local_builds"]
+    },
+    "agent-role-permissions": {"priority": 80, "can_weaken": false},
+    "skill-workflow-registry": {"priority": 70, "can_weaken": false},
+    "mcp-registry": {"priority": 60, "can_weaken": false},
+    "runtime-sandbox-approval": {"priority": 50, "can_weaken": false},
+    "verification-evidence-policy": {"priority": 40, "can_weaken": false}
+  },
+  "runtime": {
+    "sandbox_mode": "workspace-limited",
+    "approval_policy": "fail-closed",
+    "unsupported_provider_policy": "block",
+    "secret_access": "deny",
+    "reviewer_write": false,
+    "production_change": "human-approval"
+  },
+  "mcp_allowlist": {
+    "servers": {
+      "context7": {"roles": ["researcher", "architect"], "skills": ["skl-pre-research-ljh", "skl-pre-adr-ljh"], "mutation": false},
+      "playwright": {"roles": ["implementer"], "skills": ["skl-mid-impl-ljh"], "mutation": false}
+    }
+  }
+}

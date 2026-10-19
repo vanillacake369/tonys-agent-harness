@@ -1,0 +1,89 @@
+{
+  description = "Provider-neutral engineering agent harness";
+
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    llm-agents = {
+      url = "github:numtide/llm-agents.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
+
+  outputs = {self, nixpkgs, llm-agents}: let
+    systems = ["aarch64-darwin" "x86_64-linux" "aarch64-linux"];
+    forAllSystems = nixpkgs.lib.genAttrs systems;
+  in {
+    packages = forAllSystems (system: let
+      pkgs = nixpkgs.legacyPackages.${system};
+    in {
+      default = pkgs.writeShellApplication {
+        name = "harness";
+        runtimeInputs = [pkgs.python3];
+        text = ''exec ${pkgs.python3}/bin/python3 ${self}/harness.py "$@"'';
+        meta = {
+          description = "Provider-neutral engineering agent harness";
+          homepage = "https://github.com/vanillacake369/tonys-agent-harness";
+          license = pkgs.lib.licenses.mit;
+          mainProgram = "harness";
+        };
+      };
+    });
+
+    apps = forAllSystems (system: {
+      default = {
+        type = "app";
+        program = "${self.packages.${system}.default}/bin/harness";
+        meta.description = "Initialize, export, and verify provider agent harness configuration";
+      };
+    });
+
+    checks = forAllSystems (system: let
+      pkgs = nixpkgs.legacyPackages.${system};
+    in {
+      tests = pkgs.runCommand "tonys-agent-harness-tests" {nativeBuildInputs = [pkgs.python3 pkgs.jq pkgs.git pkgs.openssl];} ''
+        cp -R ${self} source
+        chmod -R u+w source
+        cd source
+        python3 -m unittest discover -s tests -v
+        touch $out
+      '';
+
+      contracts = let
+        result = import ./tests/nix/agents.test.nix {lib = pkgs.lib;};
+        passed = builtins.all (entry: entry.pass) result.results;
+      in
+        pkgs.runCommand "tonys-agent-harness-contracts" {} ''
+          test ${if passed then "1" else "0"} -eq 1
+          touch $out
+        '';
+
+      hooks = pkgs.runCommand "tonys-agent-harness-hooks" {
+        nativeBuildInputs = [
+          pkgs.bats
+          pkgs.coreutils
+          pkgs.git
+          pkgs.jq
+          pkgs.openssl
+          pkgs.perl
+          pkgs.python3
+          pkgs.ripgrep
+        ];
+      } ''
+        cp -R ${self} source
+        chmod -R u+w source
+        cd source
+        bats tests/hooks
+        touch $out
+      '';
+    });
+
+    lib = {
+      schemaVersion = 1;
+      supportedProviders = ["codex" "claude" "gemini" "kiro"];
+      publicCommands = ["cmd-vpp-work-ljh" "cmd-vpp-comment-ljh" "cmd-vpp-handoff-ljh" "cmd-vpp-ship-ljh"];
+    };
+
+    overlays.default = llm-agents.overlays.shared-nixpkgs;
+    homeManagerModules.default = import ./nix/home-manager-module.nix self;
+  };
+}

@@ -1,0 +1,33 @@
+# Project-owned input for tonys-agent-harness.
+schema_version = 1
+preset = "infra-devops"
+
+[project]
+instruction = "AGENTS.md"
+spec_root = "docs/agent"
+
+[providers]
+codex = true
+claude = true
+gemini = false
+kiro = true
+
+[workflow]
+public_commands = ["work", "comment", "handoff", "ship"]
+roles = ["requirement-designer", "researcher", "architect", "implementer", "reviewer"]
+
+[permissions]
+secret_access = "deny"
+reviewer_write = false
+researcher_write = false
+single_writer = true
+
+[approval]
+production = true
+destructive = true
+migration = true
+external_mutation = true
+
+[verification]
+retry_max = 3
+require_clean_git_for_done = true

@@ -1,0 +1,14 @@
+schema_version = 1
+
+[mandatory]
+secret_access = "deny"
+reviewer_write = false
+researcher_write = false
+single_writer = true
+production_approval = true
+destructive_approval = true
+migration_approval = true
+external_mutation_approval = true
+
+[limits]
+retry_max = 3
