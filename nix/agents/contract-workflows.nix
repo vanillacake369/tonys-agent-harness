@@ -816,6 +816,26 @@
     handoff_artifacts = ["handoff_path"];
   };
 
+  cmd-post-blog-ljh = {
+    public = true;
+    description = "Write a Korean technical blog through specification, narrative, sample approval, and structure validation phases";
+    source = "cmd-post-blog-ljh.md";
+    role = "documentation-engineer";
+    delegated_roles = ["requirement-designer" "research-engineer" "documentation-engineer"];
+    mutates_files = true;
+    needs_network = false;
+    needs_mcp = [];
+    argument_hint = "blog topic, sources, audience, and output template";
+    expected_outputs = ["Specification" "Narrative TOC" "Approved Sample" "Blog Post" "Verification"];
+    spec_inputs = ["topic" "sources" "audience" "personal_experience_scope" "output_path"];
+    required_rules = ["single-writer-no-thread-conflict" "explicit-error-handling"];
+    validation_gates = ["focused_verification" "evidence_recorded"];
+    write_owner = true;
+    parallel_safe = false;
+    depends_on = [];
+    handoff_artifacts = ["blog_specification" "sample_approval" "blog_path" "verification"];
+  };
+
   cmd-vpp-ship-ljh = {
     public = true;
     description = "Prepare an explicitly approved release or external operation without executing it";

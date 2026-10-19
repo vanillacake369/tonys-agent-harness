@@ -55,6 +55,13 @@
     members = ["documentation-handoff" "handoff" "to-issues" "code-comments"];
   };
 
+  "skl-post-blog-ljh" = {
+    description = "Phase-gated Korean technical blog writing with source-aware tone, sample approval, and structure validation.";
+    source = "skl-post-blog-ljh/SKILL.md";
+    owner = "documentation-engineer";
+    members = ["clarify-requirements" "grill-with-docs" "documentation-handoff"];
+  };
+
   "skl-phase-route-ljh" = {
     description = "Risk, uncertainty, blast-radius, and reversibility based route selection and workflow composition.";
     source = "skl-phase-route-ljh/SKILL.md";

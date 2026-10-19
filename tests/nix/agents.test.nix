@@ -230,9 +230,9 @@ in {
       builtins.all (name: builtins.hasAttr "agent-${name}" codexBindings.publicSkills) publicRoleNames
       && !(builtins.hasAttr "agent-architect" codexBindings.publicSkills)
     ))
-    (assert' "GIVEN workflow bindings WHEN public commands are promoted THEN four command facades exist" (
+    (assert' "GIVEN workflow bindings WHEN public commands are promoted THEN five command facades exist" (
       commandWorkflowNames
-      == ["cmd-vpp-comment-ljh" "cmd-vpp-handoff-ljh" "cmd-vpp-ship-ljh" "cmd-vpp-work-ljh"]
+      == ["cmd-post-blog-ljh" "cmd-vpp-comment-ljh" "cmd-vpp-handoff-ljh" "cmd-vpp-ship-ljh" "cmd-vpp-work-ljh"]
       && builtins.length legacyWorkflowNames == 37
       && builtins.elem "commit" legacyWorkflowNames
       && builtins.elem "clarify-requirements" legacyWorkflowNames
@@ -244,9 +244,10 @@ in {
     ))
     (assert' "GIVEN skill bundles WHEN lifecycle capabilities are loaded THEN VPP responsibilities are composed" (
       skillBundleNames
-      == ["skl-mid-impl-ljh" "skl-mid-perf-ljh" "skl-mid-review-ljh" "skl-phase-gate-ljh" "skl-phase-route-ljh" "skl-phase-trace-ljh" "skl-post-docs-ljh" "skl-post-ship-ljh" "skl-pre-adr-ljh" "skl-pre-prd-ljh" "skl-pre-research-ljh"]
+      == ["skl-mid-impl-ljh" "skl-mid-perf-ljh" "skl-mid-review-ljh" "skl-phase-gate-ljh" "skl-phase-route-ljh" "skl-phase-trace-ljh" "skl-post-blog-ljh" "skl-post-docs-ljh" "skl-post-ship-ljh" "skl-pre-adr-ljh" "skl-pre-prd-ljh" "skl-pre-research-ljh"]
       && builtins.elem "strategy-review" workflowIndex.skillBundles."skl-pre-adr-ljh".members
       && builtins.elem "code-safety-guardrail" workflowIndex.skillBundles."skl-mid-impl-ljh".members
+      && builtins.elem "documentation-handoff" workflowIndex.skillBundles."skl-post-blog-ljh".members
       && builtins.elem "ship" workflowIndex.skillBundles."skl-post-ship-ljh".members == false
     ))
     (assert' "GIVEN strategy review WHEN cross validation is requested THEN agreement and conflict protocol is explicit" (

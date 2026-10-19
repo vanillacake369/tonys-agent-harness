@@ -324,11 +324,12 @@ class HarnessTests(unittest.TestCase):
 
     def test_exact_public_asset_inventory(self):
         skills = {p.parent.name for p in (ROOT / "assets/skills").glob("*/SKILL.md") if p.parent.name.startswith("skl-")}
-        commands = {p.stem for p in (ROOT / "assets/commands").glob("cmd-vpp-*.md")}
-        self.assertEqual(len(skills), 11)
+        commands = {p.stem for p in (ROOT / "assets/commands").glob("cmd-*.md")}
+        self.assertEqual(len(skills), 12)
         self.assertEqual(commands, {
             "cmd-vpp-work-ljh", "cmd-vpp-comment-ljh",
             "cmd-vpp-handoff-ljh", "cmd-vpp-ship-ljh",
+            "cmd-post-blog-ljh",
         })
 
     def test_all_presets_plan(self):
