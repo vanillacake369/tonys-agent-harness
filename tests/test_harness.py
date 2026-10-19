@@ -118,10 +118,10 @@ class HarnessTests(unittest.TestCase):
             self.assertEqual(run_cli("init", "--project", str(project), "--preset", "regulated").returncode, 0)
             self.assertEqual(run_cli("export", "--project", str(project), "--output", str(output)).returncode, 0)
             expected = {
-                "codex": ("skills/skl-phase-gate-ljh/SKILL.md", "skills/workflow-cmd-vpp-work-ljh/SKILL.md"),
-                "claude": ("skills/skl-phase-gate-ljh/SKILL.md", "commands/cmd-vpp-work-ljh.md"),
-                "gemini": ("skills/skl-phase-gate-ljh/SKILL.md", "commands/cmd-vpp-work-ljh.md"),
-                "kiro": ("skills/skl-phase-gate-ljh/SKILL.md", "workflows/cmd-vpp-work-ljh.md"),
+                "codex": ("skills/skl-pre-prd-ljh/SKILL.md", "skills/workflow-cmd-mid-work-ljh/SKILL.md"),
+                "claude": ("skills/skl-pre-prd-ljh/SKILL.md", "commands/cmd-mid-work-ljh.md"),
+                "gemini": ("skills/skl-pre-prd-ljh/SKILL.md", "commands/cmd-mid-work-ljh.md"),
+                "kiro": ("skills/skl-pre-prd-ljh/SKILL.md", "workflows/cmd-mid-work-ljh.md"),
             }
             for provider, relative_paths in expected.items():
                 self.assertEqual(
@@ -325,11 +325,14 @@ class HarnessTests(unittest.TestCase):
     def test_exact_public_asset_inventory(self):
         skills = {p.parent.name for p in (ROOT / "assets/skills").glob("*/SKILL.md") if p.parent.name.startswith("skl-")}
         commands = {p.stem for p in (ROOT / "assets/commands").glob("cmd-*.md")}
-        self.assertEqual(len(skills), 12)
+        self.assertEqual(skills, {
+            "skl-pre-prd-ljh", "skl-pre-research-ljh", "skl-pre-adr-ljh",
+            "skl-mid-impl-ljh", "skl-mid-review-ljh", "skl-mid-perf-ljh",
+            "skl-post-blog-ljh", "skl-post-docs-ljh", "skl-post-ship-ljh",
+        })
         self.assertEqual(commands, {
-            "cmd-vpp-work-ljh", "cmd-vpp-comment-ljh",
-            "cmd-vpp-handoff-ljh", "cmd-vpp-ship-ljh",
-            "cmd-post-blog-ljh",
+            "cmd-mid-work-ljh", "cmd-mid-comment-ljh", "cmd-post-blog-ljh",
+            "cmd-post-handoff-ljh", "cmd-post-ship-ljh", "cmd-post-commit-ljh",
         })
 
     def test_all_presets_plan(self):

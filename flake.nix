@@ -80,7 +80,7 @@
     lib = {
       schemaVersion = 1;
       supportedProviders = ["codex" "claude" "gemini" "kiro"];
-      publicCommands = ["cmd-vpp-work-ljh" "cmd-vpp-comment-ljh" "cmd-vpp-handoff-ljh" "cmd-vpp-ship-ljh"];
+      publicCommands = ["cmd-mid-work-ljh" "cmd-mid-comment-ljh" "cmd-post-blog-ljh" "cmd-post-handoff-ljh" "cmd-post-ship-ljh" "cmd-post-commit-ljh"];
     };
 
     overlays.default = llm-agents.overlays.shared-nixpkgs;

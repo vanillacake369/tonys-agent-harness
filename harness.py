@@ -238,7 +238,7 @@ Review independently and return structured findings. Never mutate files.
     capabilities = {name: CAPABILITIES[name] for name in config["providers"]}
     files["capabilities.json"] = (json.dumps(capabilities, indent=2, sort_keys=True) + "\n").encode()
     skill_sources = sorted(path for path in (ROOT / "assets/skills").rglob("*") if path.is_file())
-    command_sources = sorted((ROOT / "assets/commands").glob("cmd-vpp-*.md"))
+    command_sources = sorted((ROOT / "assets/commands").glob("cmd-*.md"))
     for provider in config["providers"]:
         for source in skill_sources:
             relative = source.relative_to(ROOT / "assets/skills")
@@ -389,7 +389,7 @@ def command_doctor(_: argparse.Namespace) -> dict:
 
 def asset_inventory() -> dict:
     skills = sorted(p.parent.name for p in (ROOT / "assets/skills").glob("*/SKILL.md"))
-    commands = sorted(p.stem for p in (ROOT / "assets/commands").glob("cmd-vpp-*.md"))
+    commands = sorted(p.stem for p in (ROOT / "assets/commands").glob("cmd-*.md"))
     return {"skills": skills, "commands": commands}
 
 

@@ -62,24 +62,4 @@
     members = ["clarify-requirements" "grill-with-docs" "documentation-handoff"];
   };
 
-  "skl-phase-route-ljh" = {
-    description = "Risk, uncertainty, blast-radius, and reversibility based route selection and workflow composition.";
-    source = "skl-phase-route-ljh/SKILL.md";
-    owner = "orchestrator";
-    members = ["engineering-orchestrator" "complexity-analysis"];
-  };
-
-  "skl-phase-gate-ljh" = {
-    description = "Deterministic policy, human approval, fail-closed execution, and single-writer enforcement.";
-    source = "skl-phase-gate-ljh/SKILL.md";
-    owner = "orchestrator";
-    members = ["phase-execution-plan" "code-safety-guardrail"];
-  };
-
-  "skl-phase-trace-ljh" = {
-    description = "Requirement traceability, evidence, telemetry, retry budget, and Git lifecycle completion checks.";
-    source = "skl-phase-trace-ljh/SKILL.md";
-    owner = "independent-reviewer";
-    members = ["evidence-debug" "phase-execution-plan" "documentation-handoff"];
-  };
 }

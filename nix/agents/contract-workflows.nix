@@ -756,10 +756,10 @@
     handoff_artifacts = ["execution_plan" "human_gate_result"];
   };
 
-  cmd-vpp-work-ljh = {
+  cmd-mid-work-ljh = {
     public = true;
     description = "Route VPP engineering work through risk, phase, skill, and approval policy";
-    source = "cmd-vpp-work-ljh.md";
+    source = "cmd-mid-work-ljh.md";
     role = "orchestrator";
     delegated_roles = ["complexity-analyst" "requirement-designer" "research-engineer" "decision-synthesizer" "implementer" "independent-reviewer"];
     mutates_files = false;
@@ -776,10 +776,10 @@
     handoff_artifacts = ["classification" "skill_plan" "gate_results"];
   };
 
-  cmd-vpp-comment-ljh = {
+  cmd-mid-comment-ljh = {
     public = true;
     description = "Generate scoped code comments and change explanations using the project comment style";
-    source = "cmd-vpp-comment-ljh.md";
+    source = "cmd-mid-comment-ljh.md";
     role = "documentation-engineer";
     delegated_roles = ["independent-reviewer"];
     mutates_files = true;
@@ -796,10 +796,10 @@
     handoff_artifacts = ["comment_summary" "verification"];
   };
 
-  cmd-vpp-handoff-ljh = {
+  cmd-post-handoff-ljh = {
     public = true;
     description = "Create a durable project handoff linked to requirements, changes, verification, and risks";
-    source = "cmd-vpp-handoff-ljh.md";
+    source = "cmd-post-handoff-ljh.md";
     role = "documentation-engineer";
     delegated_roles = ["independent-reviewer"];
     mutates_files = true;
@@ -836,10 +836,10 @@
     handoff_artifacts = ["blog_specification" "sample_approval" "blog_path" "verification"];
   };
 
-  cmd-vpp-ship-ljh = {
+  cmd-post-ship-ljh = {
     public = true;
     description = "Prepare an explicitly approved release or external operation without executing it";
-    source = "cmd-vpp-ship-ljh.md";
+    source = "cmd-post-ship-ljh.md";
     role = "orchestrator";
     delegated_roles = ["complexity-analyst" "independent-reviewer" "documentation-engineer"];
     mutates_files = false;
@@ -854,5 +854,25 @@
     parallel_safe = false;
     depends_on = [];
     handoff_artifacts = ["operation_plan" "approval_request" "rollback_plan"];
+  };
+
+  cmd-post-commit-ljh = {
+    public = true;
+    description = "Analyze repository history and create verified SRP commits without external mutation";
+    source = "cmd-post-commit-ljh.md";
+    role = "orchestrator";
+    delegated_roles = ["implementer" "independent-reviewer"];
+    mutates_files = true;
+    needs_network = false;
+    needs_mcp = [];
+    argument_hint = "approved task scope, changed files, requirements, and verification evidence";
+    expected_outputs = ["Commit Convention" "Commit Plan" "Focused Verification" "Commits" "Remaining Changes"];
+    spec_inputs = ["repository_history" "task_scope" "changes" "verification" "requirements"];
+    required_rules = ["single-writer-no-thread-conflict" "explicit-error-handling"];
+    validation_gates = ["focused_verification" "evidence_recorded"];
+    write_owner = true;
+    parallel_safe = false;
+    depends_on = ["commit"];
+    handoff_artifacts = ["commit_plan" "commit_evidence" "remaining_changes"];
   };
 }

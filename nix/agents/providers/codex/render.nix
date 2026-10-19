@@ -178,7 +178,7 @@
         # ${skill.name}
 
         This is an internal lifecycle capability selected by the public
-        `cmd-vpp-*` command facade. It is not an independent approval or
+        `cmd-*` command facade. It is not an independent approval or
         external-mutation authority.
 
         Owner: `${skill.owner}`

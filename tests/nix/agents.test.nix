@@ -230,9 +230,9 @@ in {
       builtins.all (name: builtins.hasAttr "agent-${name}" codexBindings.publicSkills) publicRoleNames
       && !(builtins.hasAttr "agent-architect" codexBindings.publicSkills)
     ))
-    (assert' "GIVEN workflow bindings WHEN public commands are promoted THEN five command facades exist" (
+    (assert' "GIVEN workflow bindings WHEN public commands are promoted THEN six canonical command facades exist" (
       commandWorkflowNames
-      == ["cmd-post-blog-ljh" "cmd-vpp-comment-ljh" "cmd-vpp-handoff-ljh" "cmd-vpp-ship-ljh" "cmd-vpp-work-ljh"]
+      == ["cmd-mid-comment-ljh" "cmd-mid-work-ljh" "cmd-post-blog-ljh" "cmd-post-commit-ljh" "cmd-post-handoff-ljh" "cmd-post-ship-ljh"]
       && builtins.length legacyWorkflowNames == 37
       && builtins.elem "commit" legacyWorkflowNames
       && builtins.elem "clarify-requirements" legacyWorkflowNames
@@ -244,7 +244,7 @@ in {
     ))
     (assert' "GIVEN skill bundles WHEN lifecycle capabilities are loaded THEN VPP responsibilities are composed" (
       skillBundleNames
-      == ["skl-mid-impl-ljh" "skl-mid-perf-ljh" "skl-mid-review-ljh" "skl-phase-gate-ljh" "skl-phase-route-ljh" "skl-phase-trace-ljh" "skl-post-blog-ljh" "skl-post-docs-ljh" "skl-post-ship-ljh" "skl-pre-adr-ljh" "skl-pre-prd-ljh" "skl-pre-research-ljh"]
+      == ["skl-mid-impl-ljh" "skl-mid-perf-ljh" "skl-mid-review-ljh" "skl-post-blog-ljh" "skl-post-docs-ljh" "skl-post-ship-ljh" "skl-pre-adr-ljh" "skl-pre-prd-ljh" "skl-pre-research-ljh"]
       && builtins.elem "strategy-review" workflowIndex.skillBundles."skl-pre-adr-ljh".members
       && builtins.elem "code-safety-guardrail" workflowIndex.skillBundles."skl-mid-impl-ljh".members
       && builtins.elem "documentation-handoff" workflowIndex.skillBundles."skl-post-blog-ljh".members
@@ -260,15 +260,15 @@ in {
       && lib.hasInfix "합의가 정답이라는 가정을 금지한다" workflowIndex.legacyWorkflows.strategy-review.body
     ))
     (assert' "GIVEN command and skill bindings WHEN Codex skills are rendered THEN facades and bundles are separated" (
-      builtins.hasAttr "workflow-cmd-vpp-work-ljh" codexBindings.skills
+      builtins.hasAttr "workflow-cmd-mid-work-ljh" codexBindings.skills
       && builtins.hasAttr "skl-pre-adr-ljh" codexBindings.skills
       && !(builtins.hasAttr "workflow-commit" codexBindings.skills)
       && !(builtins.hasAttr "workflow-evidence-debug" codexBindings.skills)
-      && lib.hasInfix "cmd-vpp-*" codexBindings.skills."skl-phase-gate-ljh"
+      && !(builtins.hasAttr "skl-phase-gate-ljh" codexBindings.skills)
     ))
     (assert' "GIVEN multiline workflow description WHEN Codex and Kiro skills are rendered THEN YAML frontmatter is quoted" (
-      lib.hasInfix "description: \"Route VPP engineering work through risk, phase, skill, and approval policy\"" codexBindings.skills.workflow-cmd-vpp-work-ljh
-      && lib.hasInfix "description: \"Route VPP engineering work through risk, phase, skill, and approval policy\"" kiroRender.workflowSkills.workflow-cmd-vpp-work-ljh
+      lib.hasInfix "description: \"Route VPP engineering work through risk, phase, skill, and approval policy\"" codexBindings.skills.workflow-cmd-mid-work-ljh
+      && lib.hasInfix "description: \"Route VPP engineering work through risk, phase, skill, and approval policy\"" kiroRender.workflowSkills.workflow-cmd-mid-work-ljh
     ))
     (assert' "GIVEN Codex bindings WHEN A2A skill is exported THEN shared workflow is bundled" (
       builtins.hasAttr "a2a-workflow" codexBindings.skills
@@ -277,9 +277,9 @@ in {
       && lib.hasInfix "Generated Reference Bundle" codexBindings.skills.a2a-workflow
     ))
     (assert' "GIVEN workflow bindings WHEN shared guide is rendered THEN provider usage hints are present" (
-      lib.hasInfix "## workflow-cmd-vpp-work-ljh" workflowIndex.sharedGuide
-      && lib.hasInfix "Use from Claude: `/cmd-vpp-work-ljh" workflowIndex.sharedGuide
-      && lib.hasInfix "Use from Codex: invoke the `workflow-cmd-vpp-work-ljh` skill" workflowIndex.sharedGuide
+      lib.hasInfix "## workflow-cmd-mid-work-ljh" workflowIndex.sharedGuide
+      && lib.hasInfix "Use from Claude: `/cmd-mid-work-ljh" workflowIndex.sharedGuide
+      && lib.hasInfix "Use from Codex: invoke the `workflow-cmd-mid-work-ljh` skill" workflowIndex.sharedGuide
     ))
     (assert' "GIVEN Kiro bindings WHEN agents are rendered THEN role agents load shared resources" (
       builtins.length kiroAgentNames
@@ -307,13 +307,13 @@ in {
       kiroRender.agents.independent-reviewer.permissions.rules
     ))
     (assert' "GIVEN Kiro bindings WHEN workflow skills and recipes are rendered THEN command workflows are discoverable" (
-      builtins.elem "cmd-vpp-work-ljh" kiroWorkflowNames
-      && builtins.hasAttr "workflow-cmd-vpp-work-ljh" kiroRender.workflowSkills
+      builtins.elem "cmd-mid-work-ljh" kiroWorkflowNames
+      && builtins.hasAttr "workflow-cmd-mid-work-ljh" kiroRender.workflowSkills
       && builtins.hasAttr "skl-pre-adr-ljh" kiroRender.skillBundleSkills
-      && kiroRender.workflowRecipes.cmd-vpp-work-ljh.inputs.task == "engineering request and repository context"
-      && (builtins.head kiroRender.workflowRecipes.cmd-vpp-work-ljh.steps).type == "step"
-      && (builtins.head kiroRender.workflowRecipes.cmd-vpp-work-ljh.steps).agent == "orchestrator"
-      && lib.hasInfix "{{task}}" (builtins.head kiroRender.workflowRecipes.cmd-vpp-work-ljh.steps).prompt
+      && kiroRender.workflowRecipes.cmd-mid-work-ljh.inputs.task == "engineering request and repository context"
+      && (builtins.head kiroRender.workflowRecipes.cmd-mid-work-ljh.steps).type == "step"
+      && (builtins.head kiroRender.workflowRecipes.cmd-mid-work-ljh.steps).agent == "orchestrator"
+      && lib.hasInfix "{{task}}" (builtins.head kiroRender.workflowRecipes.cmd-mid-work-ljh.steps).prompt
     ))
     (assert' "GIVEN Codex bindings WHEN roles are exported THEN each role points to a permission profile" (
       builtins.all (

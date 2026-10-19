@@ -18,15 +18,15 @@ standard_pattern='multi[-[:space:]]*file|several[[:space:]]+files|feature|bug|fi
 if printf '%s' "$lower" | grep -qE "$complex_pattern"; then
   complexity=complex
   route=full
-  workflows='["cmd-vpp-work-ljh","skl-phase-route-ljh","skl-pre-research-ljh","skl-pre-adr-ljh","skl-mid-review-ljh"]'
+  workflows='["cmd-mid-work-ljh","skl-pre-research-ljh","skl-pre-adr-ljh","skl-mid-review-ljh"]'
 elif printf '%s' "$lower" | grep -qE "$standard_pattern"; then
   complexity=standard
   route=standard
-  workflows='["cmd-vpp-work-ljh","skl-pre-prd-ljh","skl-mid-impl-ljh","skl-mid-review-ljh"]'
+  workflows='["cmd-mid-work-ljh","skl-pre-prd-ljh","skl-mid-impl-ljh","skl-mid-review-ljh"]'
 else
   complexity=trivial
   route=trivial
-  workflows='["cmd-vpp-work-ljh","skl-phase-route-ljh"]'
+  workflows='["cmd-mid-work-ljh"]'
 fi
 
 if command -v shasum >/dev/null 2>&1; then

@@ -174,7 +174,7 @@
 
         # ${skill.name}
 
-        Internal capability selected by the public `cmd-vpp-*` command facade.
+        Internal capability selected by the public `cmd-*` command facade.
         Owner: `${skill.owner}`
         Composed canonical workflows: ${join ", " skill.members}
 
