@@ -23,7 +23,7 @@ setup() {
   [[ "$output" == *'"complexity":"standard"'* ]]
   [[ "$output" == *'"selected_route":"standard"'* ]]
   [[ "$output" == *'"human_approval_required":false'* ]]
-  [[ "$output" == *'"cmd-vpp-work-ljh"'* ]]
+  [[ "$output" == *'"cmd-mid-work-ljh"'* ]]
   [[ "$output" == *'"skl-pre-prd-ljh"'* ]]
   [[ "$output" == *'"skl-mid-impl-ljh"'* ]]
   [[ "$output" != *'"to-prd"'* ]]
@@ -39,41 +39,58 @@ setup() {
   file="$BATS_TEST_TMPDIR/traceability.tsv"
   artifact="$BATS_TEST_TMPDIR/artifact.md"
   printf 'persisted fixture evidence\n' > "$artifact"
-  printf 'requirement_id\tstatus\tdesign\tcode\ttest\tverification\nFR-001\tverified\t%s\t%s\t%s\t%s\n' "$artifact" "$artifact" "$artifact" "$artifact" > "$file"
-  run "$GATE" "$file"
+  printf 'repository\trevision\tphase\trequirement_id\tstatus\tdesign\timplementation\ttest\tverification\nself\tdeadbeef\t0\tFR-001\tverified\tartifact.md\tartifact.md\tartifact.md\tartifact.md\n' > "$file"
+  run "$GATE" "$file" --repo-root "$BATS_TEST_TMPDIR"
   [ "$status" -eq 0 ]
   [[ "$output" == *'traceability gate passed: 1 requirements'* ]]
 }
 
 @test "incomplete traceability fails closed" {
   file="$BATS_TEST_TMPDIR/traceability.tsv"
-  printf 'requirement_id\tstatus\tdesign\tcode\ttest\tverification\nFR-001\tverified\tdesign.md:10\t-\ttest/a.bats:4\tjust test\n' > "$file"
-  run "$GATE" "$file"
+  printf 'repository\trevision\tphase\trequirement_id\tstatus\tdesign\timplementation\ttest\tverification\nself\tdeadbeef\t0\tFR-001\tverified\tdesign.md:10\t-\ttest/a.bats:4\tjust test\n' > "$file"
+  run "$GATE" "$file" --repo-root "$BATS_TEST_TMPDIR"
   [ "$status" -eq 2 ]
-  [[ "$output" == *'missing traceability field 4'* ]]
+  [[ "$output" == *'missing traceability field 7'* ]]
 }
 
 @test "proposed requirement does not require implementation evidence" {
   file="$BATS_TEST_TMPDIR/traceability-proposed.tsv"
-  printf 'requirement_id\tstatus\tdesign\tcode\ttest\tverification\nFR-002\tproposed\tdesign.md:20\t-\t-\t-\n' > "$file"
-  run "$GATE" "$file"
+  printf 'repository\trevision\tphase\trequirement_id\tstatus\tdesign\timplementation\ttest\tverification\nself\tWORKTREE\t0\tFR-002\tproposed\tdesign.md:20\t-\t-\t-\n' > "$file"
+  run "$GATE" "$file" --repo-root "$BATS_TEST_TMPDIR"
   [ "$status" -eq 0 ]
 }
 
 @test "implemented requirement requires every evidence field" {
   file="$BATS_TEST_TMPDIR/traceability-implemented.tsv"
-  printf 'requirement_id\tstatus\tdesign\tcode\ttest\tverification\nFR-003\timplemented\tdesign.md:30\tsrc/a.nix:3\t-\tjust test\n' > "$file"
-  run "$GATE" "$file"
+  printf 'repository\trevision\tphase\trequirement_id\tstatus\tdesign\timplementation\ttest\tverification\nself\tdeadbeef\t0\tFR-003\timplemented\tdesign.md:30\tsrc/a.nix:3\t-\tjust test\n' > "$file"
+  run "$GATE" "$file" --repo-root "$BATS_TEST_TMPDIR"
   [ "$status" -eq 2 ]
-  [[ "$output" == *'missing traceability field 5'* ]]
+  [[ "$output" == *'missing traceability field 8'* ]]
 }
 
 @test "unknown requirement status fails closed" {
   file="$BATS_TEST_TMPDIR/traceability-unknown.tsv"
-  printf 'requirement_id\tstatus\tdesign\tcode\ttest\tverification\nFR-004\tunknown\tdesign.md:40\t-\t-\t-\n' > "$file"
-  run "$GATE" "$file"
+  printf 'repository\trevision\tphase\trequirement_id\tstatus\tdesign\timplementation\ttest\tverification\nself\tWORKTREE\t0\tFR-004\tunknown\tdesign.md:40\t-\t-\t-\n' > "$file"
+  run "$GATE" "$file" --repo-root "$BATS_TEST_TMPDIR"
   [ "$status" -eq 2 ]
   [[ "$output" == *'unknown status'* ]]
+}
+
+@test "traceability rejects an escaping repository reference" {
+  file="$BATS_TEST_TMPDIR/traceability-escape.tsv"
+  mkdir "$BATS_TEST_TMPDIR/repo"
+  printf 'repository\trevision\tphase\trequirement_id\tstatus\tdesign\timplementation\ttest\tverification\nself\tdeadbeef\t0\tFR-005\tverified\t../outside.md\t../outside.md\t../outside.md\t../outside.md\n' > "$file"
+  run "$GATE" "$file" --repo-root "$BATS_TEST_TMPDIR/repo"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'escapes repository root'* ]]
+}
+
+@test "traceability rejects WORKTREE for implemented evidence" {
+  file="$BATS_TEST_TMPDIR/traceability-worktree.tsv"
+  printf 'repository\trevision\tphase\trequirement_id\tstatus\tdesign\timplementation\ttest\tverification\nself\tWORKTREE\t0\tFR-006\timplemented\tdesign.md\tcode.py\ttest.py\tevidence.json\n' > "$file"
+  run "$GATE" "$file" --repo-root "$BATS_TEST_TMPDIR"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'immutable revision required'* ]]
 }
 
 @test "decision engine selects safe actions" {
