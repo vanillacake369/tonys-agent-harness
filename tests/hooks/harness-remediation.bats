@@ -276,11 +276,11 @@ JSON
 @test "traceability cross-check rejects PRD state mismatch and accepts matching state" {
   mkdir -p "$BATS_TEST_TMPDIR/prd"
   printf '### FR-X — Fixture\n\n- Status: ready\n' > "$BATS_TEST_TMPDIR/prd/fixture.md"
-  printf 'requirement_id\tstatus\tdesign\tcode\ttest\tverification\nFR-X\tready\t%s\t-\t%s\t-\n' "$BATS_TEST_TMPDIR/prd/fixture.md" "$ROOT/tests/hooks/harness-remediation.bats" > "$BATS_TEST_TMPDIR/trace.tsv"
-  run bash "$ROOT/runtime/orchestrator/traceability-gate.sh" "$BATS_TEST_TMPDIR/trace.tsv" --prd-root "$BATS_TEST_TMPDIR/prd"
+  printf 'repository\trevision\tphase\trequirement_id\tstatus\tdesign\timplementation\ttest\tverification\nself\tWORKTREE\t0\tFR-X\tready\tprd/fixture.md\t-\tfixture.test\t-\n' > "$BATS_TEST_TMPDIR/trace.tsv"
+  run bash "$ROOT/runtime/orchestrator/traceability-gate.sh" "$BATS_TEST_TMPDIR/trace.tsv" --repo-root "$BATS_TEST_TMPDIR" --prd-root "$BATS_TEST_TMPDIR/prd"
   [ "$status" -eq 0 ]
-  sed 's/FR-X\tready/FR-X\timplemented/' "$BATS_TEST_TMPDIR/trace.tsv" > "$BATS_TEST_TMPDIR/mismatch.tsv"
-  run bash "$ROOT/runtime/orchestrator/traceability-gate.sh" "$BATS_TEST_TMPDIR/mismatch.tsv" --prd-root "$BATS_TEST_TMPDIR/prd"
+  sed 's/WORKTREE\t0\tFR-X\tready/deadbeef\t0\tFR-X\timplemented/' "$BATS_TEST_TMPDIR/trace.tsv" > "$BATS_TEST_TMPDIR/mismatch.tsv"
+  run bash "$ROOT/runtime/orchestrator/traceability-gate.sh" "$BATS_TEST_TMPDIR/mismatch.tsv" --repo-root "$BATS_TEST_TMPDIR" --prd-root "$BATS_TEST_TMPDIR/prd"
   [ "$status" -eq 2 ]
 }
 
