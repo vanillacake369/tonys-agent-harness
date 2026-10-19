@@ -36,7 +36,7 @@ and `verify`; Codex, Claude, Gemini, and Kiro are explicit exporter targets.
 
 ### FR-004 — Provider capability model
 
-- Status: implemented
+- Status: in_progress
 - Codex, Claude, Gemini, and Kiro expose explicit supported, adapted, or
   unsupported capabilities.
 - Unsupported mandatory enforcement fails verification instead of disappearing.
@@ -51,7 +51,7 @@ and `verify`; Codex, Claude, Gemini, and Kiro are explicit exporter targets.
 
 ### FR-006 — Provider-neutral assets
 
-- Status: implemented
+- Status: in_progress
 - Ship the 12 lifecycle/content `skl-*` assets, five public `cmd-vpp-*` workflows, A2A
   workflow, deterministic governance scripts, and orchestrator scripts.
 
@@ -64,9 +64,11 @@ and `verify`; Codex, Claude, Gemini, and Kiro are explicit exporter targets.
 
 ### FR-008 — Nix consumption
 
-- Status: implemented
+- Status: in_progress
 - Expose a flake package/app, library metadata, and Home Manager module entry
   without embedding a machine username or home path.
+- The Home Manager adapter must consume the same normalized project manifest as
+  the CLI and must have zero activation side effects when disabled.
 
 ### FR-009 — Safe extraction
 
@@ -76,12 +78,21 @@ and `verify`; Codex, Claude, Gemini, and Kiro are explicit exporter targets.
 
 ### FR-010 — Cross-provider instruction SSoT
 
-- Status: implemented
+- Status: in_progress
 - Resolve the project-relative instruction file without allowing path traversal.
 - Export the same instruction bytes to every selected provider and include the
   instruction digest in stale-output detection.
 - Verify Claude and Gemini native references and reject provider instruction
   drift before activation.
+
+### FR-011 — Phase-complete engineering harness
+
+- Status: in_progress
+- Implement and independently verify the Phase 0–5 contracts in
+  `phase-0-5.md`.
+- Local implementation completion and native or operational verification are
+  separate statuses. An unavailable provider or unapproved external operation
+  must never be reported as passed.
 
 ## Acceptance Criteria
 
@@ -94,14 +105,18 @@ and `verify`; Codex, Claude, Gemini, and Kiro are explicit exporter targets.
 - [x] `export` deterministically creates selected provider output in a staging
       directory.
 - [x] `verify` detects tampered generated output.
-- [x] All 11 lifecycle skills and four public commands are discoverable.
+- [ ] Only the canonical `${type}-${when}-${what}-${maintainer}` public skills
+      and commands are discoverable; internal routing and gates are not skills.
 - [x] Every selected provider receives the same project `AGENTS.md`, and the
       provider instruction gate detects drift.
-- [x] `nix flake check` and the repository test command pass.
+- [x] `nix flake check` and the repository test command pass at the Phase 0
+      baseline.
+- [ ] Every Phase 0–5 exit gate has revision-bound aggregate evidence.
 
 ## Non-goals
 
 - Publishing a remote Git repository or package registry release.
-- Activating user home configuration.
+- Activating user home configuration without an explicit consumer action.
 - Executing deployments, migrations, commits, pushes, or external mutations.
-- Removing `tonys-nix/modules/agents` during the first extraction wave.
+- Performing a production deployment, migration, push, merge, or external
+  mutation without a separately verified scoped approval.
