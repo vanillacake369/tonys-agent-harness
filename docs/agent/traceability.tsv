@@ -1,11 +1,31 @@
-requirement_id	status	design	implementation	test	verification
-FR-001	implemented	docs/agent/prd/framework-mvp.md	harness.py:load_manifest,render_manifest	tests/test_harness.py:test_init_creates_manifest_and_never_overwrites;test_unknown_schema_version_fails_closed	python3 -m unittest discover -s tests -v
-FR-002	implemented	core/policy.toml	harness.py:validate_policy	tests/test_harness.py:test_policy_weakening_fails_closed	python3 -m unittest discover -s tests -v
-FR-003	implemented	docs/agent/prd/framework-mvp.md	harness.py:PRESETS	tests/test_harness.py:test_all_presets_plan	python3 -m unittest discover -s tests -v
-FR-004	implemented	core/providers.toml	harness.py:target_files	tests/test_harness.py:test_export_contains_mandatory_enforcement_and_complete_skill_resources	python3 -m unittest discover -s tests -v
-FR-005	implemented	docs/agent/adr/0001-core-exporter-boundary.md	harness.py:plan,export	tests/test_harness.py:test_plan_is_pure_and_export_is_deterministic;test_export_refuses_output_with_unrelated_manifest	python3 -m unittest discover -s tests -v
-FR-006	implemented	docs/agent/prd/framework-mvp.md	assets/skills;assets/commands;runtime	tests/test_harness.py:test_exact_public_asset_inventory;test_export_projects_skills_and_commands_to_every_selected_provider	python3 -m unittest discover -s tests -v
-FR-007	implemented	docs/agent/testing/framework-mvp.md	harness.py:verify	tests/test_harness.py:test_verify_detects_tampered_output	python3 -m unittest discover -s tests -v
-FR-008	implemented	flake.nix	nix/home-manager-module.nix	flake checks.tests	nix flake check
-FR-009	implemented	docs/agent/adr/0001-core-exporter-boundary.md	standalone repository boundary	n/a: migration safety contract	git status --short in source and target repositories
-FR-010	implemented	docs/agent/prd/framework-mvp.md	harness.py:instruction_content,source_digest,target_files;runtime/governance/provider-instructions-gate.sh	tests/test_harness.py:test_instruction_change_invalidates_export_and_provider_gate_detects_drift;test_export_projects_skills_and_commands_to_every_selected_provider	python3 -m unittest discover -s tests -v
+repository	revision	phase	requirement_id	status	design	implementation	test	verification
+self	a0ee4b0	0	FR-001	implemented	docs/agent/prd/framework-mvp.md	harness.py:load_manifest,render_manifest	tests/test_harness.py:test_init_creates_manifest_and_never_overwrites;test_unknown_schema_version_fails_closed	python3 -m unittest discover -s tests -v
+self	a0ee4b0	0	FR-002	implemented	core/policy.toml	harness.py:validate_policy	tests/test_harness.py:test_policy_weakening_fails_closed	python3 -m unittest discover -s tests -v
+self	a0ee4b0	0	FR-003	implemented	docs/agent/prd/framework-mvp.md	harness.py:PRESETS	tests/test_harness.py:test_all_presets_plan	python3 -m unittest discover -s tests -v
+self	a0ee4b0	2	FR-004	in_progress	core/providers.toml	harness.py:target_files	tests/test_harness.py:test_export_contains_mandatory_enforcement_and_complete_skill_resources	UNVERIFIED:native provider matrix incomplete
+self	a0ee4b0	1	FR-005	implemented	docs/agent/adr/0001-core-exporter-boundary.md	harness.py:plan,export	tests/test_harness.py:test_plan_is_pure_and_export_is_deterministic	python3 -m unittest discover -s tests -v
+self	WORKTREE	0	FR-006	in_progress	docs/agent/prd/phase-0-5.md	assets/skills;assets/commands	tests/test_harness.py:test_exact_public_asset_inventory	UNVERIFIED:canonical rename incomplete
+self	a0ee4b0	0	FR-007	implemented	docs/agent/testing/framework-mvp.md	harness.py:verify	tests/test_harness.py:test_verify_detects_tampered_output	python3 -m unittest discover -s tests -v
+self	WORKTREE	1	FR-008	in_progress	docs/agent/prd/phase-0-5.md	nix/home-manager-module.nix	flake.nix:checks	UNVERIFIED:normalized manifest parity incomplete
+self	a0ee4b0	0	FR-009	implemented	docs/agent/adr/0001-core-exporter-boundary.md	README.md	n/a	git status --short
+self	WORKTREE	2	FR-010	in_progress	docs/agent/prd/phase-0-5.md	harness.py:instruction_content,source_digest,target_files;runtime/governance/provider-instructions-gate.sh	tests/test_harness.py:test_instruction_change_invalidates_export_and_provider_gate_detects_drift	UNVERIFIED:Claude and Gemini native loading incomplete
+self	WORKTREE	0	FR-011	in_progress	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	UNVERIFIED:Phase 0-5 implementation active
+self	WORKTREE	0	PH-0001	in_progress	docs/agent/prd/phase-0-5.md	docs/agent	docs/agent/testing/phase-0-5.md	UNVERIFIED:Phase 0 exit pending
+self	WORKTREE	0	PH-0002	in_progress	docs/agent/prd/phase-0-5.md	runtime/orchestrator/traceability-gate.sh	tests/hooks/orchestrator-router.bats	UNVERIFIED:repository-bound gate pending
+self	WORKTREE	0	PH-0003	in_progress	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	UNVERIFIED:aggregate evidence pending
+self	WORKTREE	1	PH-0101	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
+self	WORKTREE	1	PH-0102	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
+self	WORKTREE	1	PH-0103	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
+self	WORKTREE	1	PH-0104	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
+self	WORKTREE	2	PH-0201	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
+self	WORKTREE	2	PH-0202	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
+self	WORKTREE	2	PH-0203	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
+self	WORKTREE	3	PH-0301	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
+self	WORKTREE	3	PH-0302	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
+self	WORKTREE	3	PH-0303	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
+self	WORKTREE	4	PH-0401	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
+self	WORKTREE	4	PH-0402	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
+self	WORKTREE	4	PH-0403	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
+self	WORKTREE	5	PH-0501	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
+self	WORKTREE	5	PH-0502	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
+self	WORKTREE	5	PH-0503	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
