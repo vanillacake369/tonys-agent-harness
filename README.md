@@ -100,20 +100,22 @@ Project settings may make policy stricter, but cannot relax the mandatory core.
 
 ## Public workflow
 
-Most users need only four public commands; lifecycle skills are composed behind
+Most users need only six public commands; lifecycle skills are composed behind
 them.
 
 | Command | Use it for |
 | --- | --- |
-| `cmd-vpp-work-ljh` | Route ordinary work by risk, uncertainty, and blast radius |
-| `cmd-vpp-comment-ljh` | Add scoped comments or explain a change |
-| `cmd-vpp-handoff-ljh` | Produce a reproducible engineering handoff |
-| `cmd-vpp-ship-ljh` | Prepare an approved release without executing it |
+| `cmd-mid-work-ljh` | Route ordinary work by risk, uncertainty, and blast radius |
+| `cmd-mid-comment-ljh` | Add scoped comments or explain a change |
 | `cmd-post-blog-ljh` | Write a Korean technical blog through phased specification and approval |
+| `cmd-post-handoff-ljh` | Produce a reproducible engineering handoff |
+| `cmd-post-ship-ljh` | Prepare an approved release without executing it |
+| `cmd-post-commit-ljh` | Analyze history and create verified SRP commits |
 
-The `skl-pre-*`, `skl-mid-*`, `skl-phase-*`, and `skl-post-*` assets under
-`assets/skills/` are internal lifecycle and content capabilities. Projects normally invoke
-the command facade rather than selecting those skills directly.
+The `skl-pre-*`, `skl-mid-*`, and `skl-post-*` assets under `assets/skills/`
+are lifecycle and content capabilities. Routing, approval, evidence, retry, and
+completion are internal deterministic runtime functions rather than optional
+skills.
 
 ## Architecture
 
