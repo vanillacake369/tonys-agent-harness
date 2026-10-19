@@ -51,7 +51,7 @@ and `verify`; Codex, Claude, Gemini, and Kiro are explicit exporter targets.
 
 ### FR-006 — Provider-neutral assets
 
-- Status: in_progress
+- Status: verified
 - Ship the nine lifecycle/content `skl-*` assets, six canonical public `cmd-*` workflows, A2A
   workflow, deterministic governance scripts, and orchestrator scripts.
 

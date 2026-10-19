@@ -4,15 +4,15 @@ self	a0ee4b0	0	FR-002	implemented	core/policy.toml	harness.py:validate_policy	te
 self	a0ee4b0	0	FR-003	implemented	docs/agent/prd/framework-mvp.md	harness.py:PRESETS	tests/test_harness.py:test_all_presets_plan	python3 -m unittest discover -s tests -v
 self	a0ee4b0	2	FR-004	in_progress	core/providers.toml	harness.py:target_files	tests/test_harness.py:test_export_contains_mandatory_enforcement_and_complete_skill_resources	UNVERIFIED:native provider matrix incomplete
 self	a0ee4b0	1	FR-005	implemented	docs/agent/adr/0001-core-exporter-boundary.md	harness.py:plan,export	tests/test_harness.py:test_plan_is_pure_and_export_is_deterministic	python3 -m unittest discover -s tests -v
-self	WORKTREE	0	FR-006	in_progress	docs/agent/prd/phase-0-5.md	assets/skills;assets/commands	tests/test_harness.py:test_exact_public_asset_inventory	UNVERIFIED:canonical rename incomplete
+self	712dfa4	0	FR-006	verified	docs/agent/prd/phase-0-5.md	assets/skills;assets/commands	tests/test_harness.py:test_exact_public_asset_inventory	docs/agent/evidence/phase-0-verification.json
 self	a0ee4b0	0	FR-007	implemented	docs/agent/testing/framework-mvp.md	harness.py:verify	tests/test_harness.py:test_verify_detects_tampered_output	python3 -m unittest discover -s tests -v
 self	WORKTREE	1	FR-008	in_progress	docs/agent/prd/phase-0-5.md	nix/home-manager-module.nix	flake.nix:checks	UNVERIFIED:normalized manifest parity incomplete
 self	a0ee4b0	0	FR-009	implemented	docs/agent/adr/0001-core-exporter-boundary.md	README.md	n/a	git status --short
 self	WORKTREE	2	FR-010	in_progress	docs/agent/prd/phase-0-5.md	harness.py:instruction_content,source_digest,target_files;runtime/governance/provider-instructions-gate.sh	tests/test_harness.py:test_instruction_change_invalidates_export_and_provider_gate_detects_drift	UNVERIFIED:Claude and Gemini native loading incomplete
 self	WORKTREE	0	FR-011	in_progress	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	UNVERIFIED:Phase 0-5 implementation active
-self	WORKTREE	0	PH-0001	in_progress	docs/agent/prd/phase-0-5.md	docs/agent	docs/agent/testing/phase-0-5.md	UNVERIFIED:Phase 0 exit pending
-self	WORKTREE	0	PH-0002	in_progress	docs/agent/prd/phase-0-5.md	runtime/orchestrator/traceability-gate.sh	tests/hooks/orchestrator-router.bats	UNVERIFIED:repository-bound gate pending
-self	WORKTREE	0	PH-0003	in_progress	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	UNVERIFIED:aggregate evidence pending
+self	712dfa4	0	PH-0001	verified	docs/agent/prd/phase-0-5.md	docs/agent/prd/phase-0-5.md	docs/agent/testing/phase-0-5.md	docs/agent/evidence/phase-0-verification.json
+self	712dfa4	0	PH-0002	verified	docs/agent/prd/phase-0-5.md	runtime/orchestrator/traceability-gate.sh	tests/hooks/orchestrator-router.bats	docs/agent/evidence/phase-0-verification.json
+self	712dfa4	0	PH-0003	verified	docs/agent/prd/phase-0-5.md	docs/agent/evidence/phase-0-verification.json	docs/agent/testing/phase-0-5.md	docs/agent/evidence/phase-0-verification.json
 self	WORKTREE	1	PH-0101	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
 self	WORKTREE	1	PH-0102	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
 self	WORKTREE	1	PH-0103	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-

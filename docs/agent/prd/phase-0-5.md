@@ -49,21 +49,21 @@ are not required to follow this convention.
 
 ### PH-0001 — Truthful specification ownership
 
-- Status: in_progress
+- Status: verified
 - Framework PRDs, ADRs, tests, checklist, traceability, and current evidence are
   owned by this repository.
 - Historical reports are marked historical and cannot prove current completion.
 
 ### PH-0002 — Repository-bound traceability
 
-- Status: in_progress
+- Status: verified
 - Every row identifies repository, revision, phase, requirement, state, design,
   implementation, test, and verification evidence.
 - Local references must resolve below the declared repository root.
 
 ### PH-0003 — Phase evidence
 
-- Status: in_progress
+- Status: verified
 - Each phase emits revision-bound aggregate evidence with commands, exit codes,
   durations, provider statuses, open items, and a phase decision.
 - Relevant later changes make prior evidence stale.

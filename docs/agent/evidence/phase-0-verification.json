@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "phase": 0,
+  "repository": "tonys-agent-harness",
+  "tested_revision": "712dfa4",
+  "requirements": ["FR-006", "PH-0001", "PH-0002", "PH-0003"],
+  "decision": "VERIFIED",
+  "commands": [
+    {
+      "command": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v",
+      "exit_code": 0,
+      "duration_seconds": 2.513,
+      "result": "21 tests passed"
+    },
+    {
+      "command": "bats tests/hooks",
+      "exit_code": 0,
+      "duration_seconds": 11.279,
+      "result": "109 tests passed"
+    },
+    {
+      "command": "nix flake check --no-write-lock-file",
+      "exit_code": 0,
+      "duration_seconds": 1.12,
+      "result": "all compatible-system checks passed; Linux systems not executed on Darwin"
+    },
+    {
+      "command": "runtime/orchestrator/traceability-gate.sh docs/agent/traceability.tsv --repo-root . --prd-root docs/agent/prd",
+      "exit_code": 0,
+      "duration_seconds": 0.024,
+      "result": "30 requirements validated"
+    },
+    {
+      "command": "legacy public-name search",
+      "exit_code": 0,
+      "duration_seconds": 0.001,
+      "result": "no legacy command or public phase-skill source found"
+    },
+    {
+      "command": "git status --porcelain=v1",
+      "exit_code": 0,
+      "duration_seconds": 0.001,
+      "result": "clean before evidence artifact"
+    }
+  ],
+  "conditional_checks": [],
+  "open_items": [],
+  "notes": [
+    "This evidence verifies Phase 0 only.",
+    "Later changes to Phase 0 contracts, traceability, or public inventory make this evidence stale."
+  ]
+}
