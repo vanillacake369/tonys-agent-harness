@@ -109,9 +109,10 @@ them.
 | `cmd-vpp-comment-ljh` | Add scoped comments or explain a change |
 | `cmd-vpp-handoff-ljh` | Produce a reproducible engineering handoff |
 | `cmd-vpp-ship-ljh` | Prepare an approved release without executing it |
+| `cmd-post-blog-ljh` | Write a Korean technical blog through phased specification and approval |
 
 The `skl-pre-*`, `skl-mid-*`, `skl-phase-*`, and `skl-post-*` assets under
-`assets/skills/` are internal lifecycle capabilities. Projects normally invoke
+`assets/skills/` are internal lifecycle and content capabilities. Projects normally invoke
 the command facade rather than selecting those skills directly.
 
 ## Architecture
