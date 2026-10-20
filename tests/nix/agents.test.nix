@@ -128,6 +128,12 @@ in {
       && lib.hasInfix "runtimeFiles" homeManagerModuleText
       && lib.hasInfix "agent-notify.sh" homeManagerModuleText
     ))
+    (assert' "GIVEN a consumer needs runtime credentials WHEN the secret launcher is enabled THEN its package is installed explicitly" (
+      lib.hasInfix "runtime-secrets.hm.nix" homeManagerModuleText
+      && lib.hasInfix "secretLauncher.enable" secretsModuleText
+      && lib.hasInfix "secretLauncher.secretsFile" secretsModuleText
+      && lib.hasInfix "lib.mkIf cfg.secretLauncher.enable" secretsModuleText
+    ))
     (assert' "GIVEN MCP source WHEN rendering Codex stdio server THEN enabled flag is present" (
       rendered.codex.test-server.enabled == true
     ))

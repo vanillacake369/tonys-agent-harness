@@ -1,5 +1,11 @@
 # agent launcher가 실행 시점에 필요한 secret 환경을 구성한다.
-{pkgs, ...}: let
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}: let
+  cfg = config.programs.tonys-agent-harness;
   agentSecretEnv = pkgs.writeShellApplication {
     name = "agent-secret-env";
     runtimeInputs = [pkgs.sops];
@@ -9,7 +15,8 @@
         exit 64
       fi
 
-      secrets_file="''${AGENT_SECRETS_FILE:-$HOME/dev/tonys-nix/secrets/mcp.yaml}"
+      default_secrets_file=${lib.escapeShellArg cfg.secretLauncher.secretsFile}
+      secrets_file="''${AGENT_SECRETS_FILE:-$default_secrets_file}"
       if [ "$(uname -s)" = "Darwin" ]; then
         default_age_key_file="$HOME/Library/Application Support/sops/age/keys.txt"
       else
@@ -45,5 +52,16 @@
     '';
   };
 in {
-  home.packages = [agentSecretEnv];
+  options.programs.tonys-agent-harness.secretLauncher = {
+    enable = lib.mkEnableOption "runtime credential launcher for agent commands";
+    secretsFile = lib.mkOption {
+      type = lib.types.str;
+      default = "${config.home.homeDirectory}/.config/agents/secrets.yaml";
+      description = "SOPS document read by agent-secret-env at process launch.";
+    };
+  };
+
+  config = lib.mkIf cfg.secretLauncher.enable {
+    home.packages = [agentSecretEnv];
+  };
 }

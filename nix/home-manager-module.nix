@@ -48,6 +48,8 @@ self: {
     };
   };
 in {
+  imports = [./agents/runtime-secrets.hm.nix];
+
   options.programs.tonys-agent-harness = {
     enable = lib.mkEnableOption "provider-neutral agent harness";
     package = lib.mkOption {
