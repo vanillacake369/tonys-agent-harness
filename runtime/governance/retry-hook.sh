@@ -22,8 +22,13 @@ if [[ -z "$task" ]]; then
 fi
 state=${AGENT_RETRY_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/agent-policy/retry.json}
 if [[ "$MODE" == pre ]]; then
-  "$ROOT/retry-budget.sh" status "$state" "$task"
-  exit $?
+  if budget_output=$("$ROOT/retry-budget.sh" status "$state" "$task"); then
+    exit 0
+  else
+    code=$?
+    printf 'retry hook blocked: %s\n' "$budget_output" >&2
+    exit "$code"
+  fi
 fi
 [[ "$MODE" == post || "$MODE" == failure ]] || { echo "retry hook: expected pre, post, or failure" >&2; exit 2; }
 if [[ "$MODE" == failure ]]; then
@@ -35,7 +40,15 @@ else
 fi
 if [[ "$exit_code" != 0 ]] || grep -qiE '(^|\n)(error:|FAIL\b|fatal:|panic:|exception:)' <<<"$output"; then
   reason=$(sed -n '1p' <<<"$output" | cut -c1-160); [[ -n "$reason" ]] || reason="exit-$exit_code"
-  "$ROOT/retry-budget.sh" record "$state" "$task" fail "$reason" "$MAX"
+  outcome=fail
 else
-  "$ROOT/retry-budget.sh" record "$state" "$task" success "verified-success" "$MAX"
+  outcome=success
+  reason=verified-success
+fi
+if budget_output=$("$ROOT/retry-budget.sh" record "$state" "$task" "$outcome" "$reason" "$MAX"); then
+  exit 0
+else
+  code=$?
+  printf 'retry hook blocked: %s\n' "$budget_output" >&2
+  exit "$code"
 fi

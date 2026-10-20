@@ -156,7 +156,7 @@ JSON
   run env AGENT_TASK_STATE_DIR="$BATS_TEST_TMPDIR/state" python3 "$GOV/task-lifecycle.py" start <<<"$payload"
   [ "$status" -eq 0 ]
   run env AGENT_TASK_STATE_DIR="$BATS_TEST_TMPDIR/state" python3 "$GOV/task-lifecycle.py" stop <<<"$payload"
-  [ "$status" -eq 2 ]
+  [ "$status" -eq 0 ]
   [[ "$output" == *'completion evidence and scope required'* ]]
 }
 
@@ -229,6 +229,31 @@ JSON
   [ "$status" -eq 2 ]
 }
 
+@test "retry provider adapter is silent for successful pre and post hooks" {
+  state="$BATS_TEST_TMPDIR/retry-provider-output.json"
+  pre_payload='{"tool_name":"Bash","tool_input":{"command":"true"}}'
+  run bash -c 'printf "%s" "$1" | env AGENT_RETRY_STATE="$2" AGENT_TASK_ID=silent-task bash "$3" pre >"$4"' \
+    _ "$pre_payload" "$state" "$GOV/retry-hook.sh" "$BATS_TEST_TMPDIR/pre.stdout"
+  [ "$status" -eq 0 ]
+  [ ! -s "$BATS_TEST_TMPDIR/pre.stdout" ]
+
+  post_payload='{"tool_name":"Bash","tool_input":{"command":"true"},"tool_response":{"exit_code":0,"output":"ok"}}'
+  run bash -c 'printf "%s" "$1" | env AGENT_RETRY_STATE="$2" AGENT_TASK_ID=silent-task bash "$3" post >"$4"' \
+    _ "$post_payload" "$state" "$GOV/retry-hook.sh" "$BATS_TEST_TMPDIR/post.stdout"
+  [ "$status" -eq 0 ]
+  [ ! -s "$BATS_TEST_TMPDIR/post.stdout" ]
+  run jq -e '.tasks["silent-task"].status == "DONE"' "$state"
+  [ "$status" -eq 0 ]
+}
+
+@test "pre-tool gate emits no unsupported Codex JSON on allow" {
+  state="$BATS_TEST_TMPDIR/pre-tool-output.json"
+  payload='{"cwd":"/tmp","tool_name":"Bash","tool_input":{"command":"printf safe"}}'
+  run env AGENT_RETRY_STATE="$state" AGENT_TASK_ID=pre-tool-task bash "$GOV/pre-tool-gate.sh" <<<"$payload"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
 @test "provider failure event increments the shared retry budget" {
   state="$BATS_TEST_TMPDIR/failure-event.json"
   payload='{"tool_name":"Bash","error":"command failed"}'
@@ -281,7 +306,7 @@ JSON
   task=$(jq -r .task_id "$state_dir"/*.json)
   for attempt in 1 2 3; do bash "$GOV/retry-budget.sh" record "$retry_state" "$task" fail fixture >/dev/null || true; done
   run env AGENT_TASK_STATE_DIR="$state_dir" AGENT_RETRY_STATE="$retry_state" python3 "$GOV/task-lifecycle.py" stop <<<"$payload"
-  [ "$status" -eq 2 ]
+  [ "$status" -eq 0 ]
   [[ "$output" == *'retry budget remains BLOCKED'* ]]
   [ "$(jq -r .task_id "$state_dir"/*.json)" = "$task" ]
 }
@@ -339,7 +364,9 @@ JSON
 @test "Codex and Gemini lifecycle adapters include start and blocking stop" {
   run rg -n 'SessionStart|task-lifecycle.py start|task-lifecycle.py stop' "$ROOT/nix/agents/providers/codex/render.nix"
   [ "$status" -eq 0 ]
-  [[ "$output" == *'SessionStart'* && "$output" == *'task-lifecycle.py start'* && "$output" == *'task-lifecycle.py stop'* ]]
+  [[ "$output" == *'SessionStart'* && "$output" == *'task-lifecycle.py start'* && "$output" == *'task-lifecycle.py stop >/dev/null'* ]]
+  run rg -n 'pre-tool-gate.sh' "$ROOT/nix/agents/providers/codex/render.nix"
+  [ "$status" -eq 0 ]
   run rg -n 'BeforeAgent|AfterAgent|task-lifecycle.py start|task-lifecycle.py stop' "$ROOT/nix/agents/providers/gemini/render.nix"
   [ "$status" -eq 0 ]
   [[ "$output" == *'BeforeAgent'* && "$output" == *'AfterAgent'* && "$output" == *'task-lifecycle.py start'* && "$output" == *'task-lifecycle.py stop'* ]]

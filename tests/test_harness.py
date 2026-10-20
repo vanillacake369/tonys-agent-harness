@@ -383,6 +383,8 @@ class HarnessTests(unittest.TestCase):
             self.assertIn("disallowedTools: Write, Edit, NotebookEdit, Bash", reviewer)
             codex_text = (output / "codex/config.toml").read_text()
             self.assertIn("[[hooks.SessionStart]]", codex_text)
+            self.assertIn("pre-tool-gate.sh", codex_text)
+            self.assertIn("task-lifecycle.py stop >/dev/null", codex_text)
             gemini = json.loads((output / "gemini/settings.json").read_text())
             self.assertIn("BeforeAgent", gemini["hooks"])
             self.assertIn("AfterTool", gemini["hooks"])

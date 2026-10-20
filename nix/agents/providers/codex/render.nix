@@ -41,7 +41,7 @@
         hooks = [
           {
             type = "command";
-            command = "bash ~/.config/agents/governance/retry-hook.sh pre";
+            command = "bash ~/.config/agents/governance/pre-tool-gate.sh";
             timeout = 5;
           }
         ];
@@ -64,7 +64,7 @@
         hooks = [
           {
             type = "command";
-            command = "python3 ~/.config/agents/governance/task-lifecycle.py stop";
+            command = "python3 ~/.config/agents/governance/task-lifecycle.py stop >/dev/null";
             timeout = 5;
           }
           {

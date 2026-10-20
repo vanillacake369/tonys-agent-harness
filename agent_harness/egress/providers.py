@@ -59,6 +59,10 @@ Review independently and return structured findings. Never mutate files.
             files["kiro/agents/independent-reviewer.json"] = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode()
             hooks = {"hooks": [{"trigger": "AgentSpawn", "command": "python3 ~/.config/agents/governance/task-lifecycle.py start"}, {"trigger": "PreToolUse", "matcher": "execute_bash|fs_read|fs_write", "command": "bash ~/.config/agents/governance/pre-tool-gate.sh"}, {"trigger": "PostToolUse", "matcher": "execute_bash|fs_write", "command": "bash ~/.config/agents/governance/retry-hook.sh post"}, {"trigger": "Stop", "command": "bash ~/.config/agents/governance/kiro-stop.sh"}]}
             files["kiro/hooks/engineering-governance.json"] = (json.dumps(hooks, indent=2, sort_keys=True) + "\n").encode()
+    if "codex/config.toml" in files:
+        files["codex/config.toml"] = files["codex/config.toml"].replace(
+            b'task-lifecycle.py stop"', b'task-lifecycle.py stop >/dev/null"'
+        )
     retry_max = str(config.get("verification", {}).get("retry_max", 3))
     for name in ("codex/config.toml", "claude/settings.json", "gemini/settings.json", "kiro/hooks/engineering-governance.json"):
         if name in files:

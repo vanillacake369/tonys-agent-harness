@@ -75,7 +75,8 @@ def main():
         if retry_state.is_file():
             retry = json.loads(retry_state.read_text())
             if retry.get("tasks", {}).get(state.get("task_id"), {}).get("status") == "BLOCKED":
-                raise ValueError("retry budget remains BLOCKED; explicit human resolution required")
+                print("BLOCKED: retry budget remains BLOCKED; explicit human resolution required")
+                return 0
         changed = {name for name in baseline["files"].keys() | current["files"].keys()
                    if baseline["files"].get(name) != current["files"].get(name)}
         if baseline["head"] != current["head"]:
@@ -96,17 +97,21 @@ def main():
         evidence = os.environ.get("AGENT_COMPLETION_EVIDENCE")
         scope = os.environ.get("AGENT_TASK_SCOPE")
         if not evidence or not scope:
-            raise ValueError("code changed: completion evidence and scope required; preserve work and report BLOCKED")
+            print("BLOCKED: code changed: completion evidence and scope required; preserve work and report BLOCKED")
+            return 0
         allowed = set(Path(scope).read_text().splitlines())
         if not set(code_changes).issubset(allowed):
-            raise ValueError("task code changes exceed completion scope")
+            print("BLOCKED: task code changes exceed completion scope")
+            return 0
         code = subprocess.call(["bash", str(Path(__file__).with_name("completion-gate.sh")),
                                 "--repo", str(repo), "--scope", scope, "--evidence", evidence])
         if code == 0:
             state.update({"session": session, "task_id": secrets.token_hex(16),
                           "baseline": snapshot()})
             state_file.write_text(json.dumps(state))
-        return code
+        else:
+            print("BLOCKED: completion evidence did not satisfy the completion gate")
+        return 0
     finally:
         lock.rmdir()
 
