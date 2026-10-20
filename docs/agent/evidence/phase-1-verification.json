@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "phase": 1,
+  "repository": "tonys-agent-harness",
+  "tested_revision": "fd445a0de728454d0e7fd9fc2419bc07d6e1a7c3",
+  "requirements": ["FR-008", "PH-0101", "PH-0102", "PH-0103", "PH-0104"],
+  "decision": "VERIFIED",
+  "commands": [
+    {"command": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v", "exit_code": 0, "duration_seconds": 4.03, "result": "27 tests passed"},
+    {"command": "nix flake check --no-update-lock-file", "exit_code": 0, "duration_seconds": 22.81, "result": "all compatible aarch64-darwin checks passed; Linux systems omitted"}
+  ],
+  "conditional_checks": [{"name": "home-manager consumer activation", "status": "STATICALLY_VERIFIED", "evidence": "Nix normalization parity and disabled-mode contracts passed; no user activation executed"}],
+  "open_items": []
+}

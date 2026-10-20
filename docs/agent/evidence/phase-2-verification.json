@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "phase": 2,
+  "repository": "tonys-agent-harness",
+  "tested_revision": "fd445a0de728454d0e7fd9fc2419bc07d6e1a7c3",
+  "requirements": ["FR-004", "FR-010", "PH-0201", "PH-0202", "PH-0203"],
+  "decision": "VERIFIED_WITH_EXPLICIT_GAPS",
+  "commands": [
+    {"command": "bats tests/hooks", "exit_code": 0, "duration_seconds": 13.31, "result": "114 tests passed"},
+    {"command": "provider-native-conformance.sh --repo TEMP_PROJECT --generated TEMP_GENERATED", "exit_code": 0, "duration_seconds": 2.37, "result": "receipt complete with explicit non-pass provider states"}
+  ],
+  "provider_status": [
+    {"provider": "codex", "version": "codex-cli 0.162.1", "status": "UNAVAILABLE", "evidence": "harmless sandbox probe exited 134; not treated as denial success"},
+    {"provider": "kiro", "version": "kiro-cli 2.31.1", "status": "NATIVE_VERIFIED", "evidence": "native agent validation passed and reviewer has no write tool"},
+    {"provider": "claude", "version": "unknown", "status": "UNAVAILABLE", "evidence": "binary not installed"},
+    {"provider": "gemini", "version": "unknown", "status": "UNAVAILABLE", "evidence": "binary not installed"}
+  ],
+  "source_digest": "16459c1bb573f2e29040137ce86939afd9c50b83cf9b3ba2ec5c19d27d6724ef",
+  "generated_digest": "05ccc57a7f751b2328d6e8f82c2663bd99c34e4814c579797a32824025dfa280",
+  "open_items": ["Codex native sandbox cannot start in the current nested execution context", "Claude and Gemini native binaries are unavailable"]
+}

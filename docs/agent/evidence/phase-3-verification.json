@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "phase": 3,
+  "repository": "tonys-agent-harness",
+  "tested_revision": "fd445a0de728454d0e7fd9fc2419bc07d6e1a7c3",
+  "requirements": ["PH-0301", "PH-0302", "PH-0303"],
+  "decision": "VERIFIED",
+  "commands": [
+    {"command": "bats tests/hooks", "exit_code": 0, "duration_seconds": 13.31, "result": "114 tests passed, including frozen DAG, retry, completion, test-review, and Git gates"},
+    {"command": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v", "exit_code": 0, "duration_seconds": 4.03, "result": "27 tests passed"}
+  ],
+  "conditional_checks": [{"name": "commit facade", "status": "STATICALLY_VERIFIED", "evidence": "command contract and Git lifecycle tests pass; no push or external mutation performed"}],
+  "open_items": []
+}
