@@ -54,6 +54,11 @@
   };
   normalizedFixture = normalizeConfig (builtins.fromTOML (builtins.readFile ../fixtures/agent-harness.toml));
   expectedNormalizedFixture = builtins.fromJSON (builtins.readFile ../fixtures/normalized-config.json);
+  consumerContract = import ../../nix/consumer-contract.nix {
+    enabled = true;
+    normalized = normalizedHarness;
+    outputDirectory = "/tmp/generated";
+  };
 
   assert' = name: cond:
     if cond
@@ -125,9 +130,17 @@ in {
     ))
     (assert' "GIVEN a consumer evaluates the module WHEN it needs compatibility data THEN a versioned public contract is exposed" (
       lib.hasInfix "consumerContract" homeManagerModuleText
-      && lib.hasInfix "contractVersion" homeManagerModuleText
-      && lib.hasInfix "enabledProviders" homeManagerModuleText
-      && lib.hasInfix "publicCommands" homeManagerModuleText
+      && lib.hasInfix "consumer-contract.nix" homeManagerModuleText
+    ))
+    (assert' "GIVEN normalized configuration WHEN the producer emits its consumer contract THEN exact public values are stable" (
+      consumerContract
+      == {
+        contractVersion = 1;
+        enabled = true;
+        enabledProviders = ["codex" "gemini" "kiro"];
+        outputDirectory = "/tmp/generated";
+        publicCommands = ["validate" "doctor" "plan" "export" "verify"];
+      }
     ))
     (assert' "GIVEN provider hooks WHEN Home Manager activates THEN every shared runtime hook is installed" (
       lib.hasInfix ".config/agents" homeManagerModuleText

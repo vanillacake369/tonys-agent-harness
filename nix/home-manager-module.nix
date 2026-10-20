@@ -18,6 +18,11 @@ self: {
     if normalized == null
     then null
     else pkgs.writeText "agent-harness-normalized.json" (builtins.toJSON normalized);
+  consumerContract = import ./consumer-contract.nix {
+    enabled = cfg.enable;
+    inherit normalized;
+    outputDirectory = cfg.outputDirectory;
+  };
   projectSource =
     if cfg.manifest == null || cfg.instruction == null || normalized == null
     then null
@@ -91,16 +96,7 @@ in {
     consumerContract = lib.mkOption {
       type = lib.types.attrs;
       readOnly = true;
-      default = {
-        contractVersion = 1;
-        enabled = cfg.enable;
-        enabledProviders =
-          if normalized == null
-          then []
-          else normalized.providers;
-        publicCommands = ["validate" "doctor" "plan" "export" "verify"];
-        inherit (cfg) outputDirectory;
-      };
+      default = consumerContract;
       description = "Versioned public compatibility contract for Home Manager consumers.";
     };
   };
