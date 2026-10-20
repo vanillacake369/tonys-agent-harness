@@ -99,6 +99,33 @@ class HarnessTests(unittest.TestCase):
             self.assertEqual(refused.returncode, 2)
             self.assertEqual(link.read_text(), "user-owned\n")
 
+    def test_reconcile_guides_reads_immutable_source_and_writes_only_to_workspace(self):
+        with tempfile.TemporaryDirectory() as raw:
+            source = Path(raw) / "source"
+            workspace = Path(raw) / "workspace"
+            guides = Path(raw) / "team-guidelines"
+            guides.mkdir()
+            workspace.mkdir()
+            self.assertEqual(run_cli("init", "--project", str(source)).returncode, 0)
+            manifest = source / "agent-harness.toml"
+            manifest.write_text(
+                manifest.read_text()
+                .replace('enabled = false', 'enabled = true')
+                .replace('source = ""', f'source = {json.dumps(str(guides))}')
+            )
+            source.chmod(0o555)
+            try:
+                result = run_cli(
+                    "reconcile-guides",
+                    "--project", str(source),
+                    "--workspace", str(workspace),
+                )
+            finally:
+                source.chmod(0o755)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse((source / ".agent-context").exists())
+            self.assertEqual((workspace / ".agent-context/team-guides").resolve(), guides.resolve())
+
     def test_approval_trust_path_is_external_and_fingerprint_bound(self):
         with tempfile.TemporaryDirectory() as raw:
             project = Path(raw) / "project"

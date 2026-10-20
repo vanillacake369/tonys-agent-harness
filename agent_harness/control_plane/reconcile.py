@@ -163,13 +163,14 @@ def verify(project: Path, output: Path) -> dict:
     return {"status": "PASS", "source_digest": source_digest(config, instruction), "files": len(expected)}
 
 
-def reconcile_guides(project: Path) -> dict:
+def reconcile_guides(project: Path, workspace: Path | None = None) -> dict:
     config = normalized(load_manifest(project))
+    workspace = workspace or project
     guides = config["project"]["guides"]
     if not guides["enabled"]:
         return {"status": "DISABLED", "changed": False}
     source = Path(guides["source"]).expanduser().resolve()
-    link = project / guides["link"]
+    link = workspace / guides["link"]
     link.parent.mkdir(parents=True, exist_ok=True)
     if link.is_symlink():
         if link.resolve() == source:

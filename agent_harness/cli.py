@@ -47,7 +47,10 @@ def command_normalize(args: argparse.Namespace) -> dict:
 
 
 def command_reconcile_guides(args: argparse.Namespace) -> dict:
-    return reconcile_guides(args.project.resolve())
+    return reconcile_guides(
+        args.project.resolve(),
+        args.workspace.resolve() if args.workspace else args.project.resolve(),
+    )
 
 
 def parser() -> argparse.ArgumentParser:
@@ -64,6 +67,7 @@ def parser() -> argparse.ArgumentParser:
     normalize_command.set_defaults(handler=command_normalize)
     guides_command = sub.add_parser("reconcile-guides")
     guides_command.add_argument("--project", type=Path, default=Path.cwd())
+    guides_command.add_argument("--workspace", type=Path)
     guides_command.set_defaults(handler=command_reconcile_guides)
     for name in ("plan", "export", "verify"):
         command = sub.add_parser(name)
