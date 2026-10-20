@@ -280,9 +280,9 @@ class HarnessTests(unittest.TestCase):
             self.assertEqual(run_cli("export", "--project", str(project), "--output", str(output)).returncode, 0)
             expected = {
                 "codex": ("skills/skl-pre-prd-ljh/SKILL.md", "skills/workflow-cmd-mid-work-ljh/SKILL.md"),
-                "claude": ("skills/skl-pre-prd-ljh/SKILL.md", "commands/cmd-mid-work-ljh.md"),
-                "gemini": ("skills/skl-pre-prd-ljh/SKILL.md", "commands/cmd-mid-work-ljh.md"),
-                "kiro": ("skills/skl-pre-prd-ljh/SKILL.md", "workflows/cmd-mid-work-ljh.md"),
+                "claude": ("skills/skl-pre-prd-ljh/SKILL.md", "skills/cmd-mid-work-ljh/SKILL.md"),
+                "gemini": ("commands/skl-pre-prd-ljh.toml", "commands/cmd-mid-work-ljh.toml"),
+                "kiro": ("skills/skl-pre-prd-ljh/SKILL.md", "skills/cmd-mid-work-ljh/SKILL.md"),
             }
             for provider, relative_paths in expected.items():
                 self.assertEqual(
@@ -420,7 +420,7 @@ class HarnessTests(unittest.TestCase):
         result = subprocess.run(["bash", str(transition)], input=json.dumps(blocked), text=True, capture_output=True)
         self.assertEqual(result.returncode, 2)
 
-    def test_execution_gate_requires_scoped_approval_for_push(self):
+    def test_execution_gate_separates_local_engineering_from_external_mutation(self):
         gate = ROOT / "runtime/governance/execution-gate.py"
         payload = {"tool_name": "Bash", "tool_input": {"command": "git push origin main"}}
         result = subprocess.run([sys.executable, str(gate)], input=json.dumps(payload), text=True, capture_output=True)
@@ -430,13 +430,27 @@ class HarnessTests(unittest.TestCase):
         result = subprocess.run([sys.executable, str(gate)], input=json.dumps(safe), text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         for command in (
+            "git commit -m change",
+            "nix build .#checks.aarch64-darwin.tests --no-link",
+            "nix run nixpkgs#bats -- tests/hooks",
+            "podman run --rm test-image",
+            "docker compose run --rm tests",
+            "printf %s $(pwd)",
+            "printf %s `pwd`",
+        ):
+            with self.subTest(command=command):
+                payload = {"tool_name": "Bash", "tool_input": {"command": command}}
+                result = subprocess.run([sys.executable, str(gate)], input=json.dumps(payload), text=True, capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+        for command in (
             "git -C /tmp/repo push origin main",
             "kubectl --context production apply -f deployment.yaml",
             "terraform -chdir=infra apply",
             'bash -c "git push origin main"',
             "git status & terraform apply",
             "git status\nterraform apply",
-            "git commit -m change",
+            "printf %s $(git push origin main)",
+            "printf %s `git push origin main`",
         ):
             with self.subTest(command=command):
                 payload = {"tool_name": "Bash", "tool_input": {"command": command}}

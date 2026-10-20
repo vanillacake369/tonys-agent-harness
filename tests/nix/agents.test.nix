@@ -128,6 +128,14 @@ in {
       && lib.hasInfix "runtimeFiles" homeManagerModuleText
       && lib.hasInfix "agent-notify.sh" homeManagerModuleText
     ))
+    (assert' "GIVEN generated provider artifacts WHEN Home Manager activates THEN native discovery roots are reconciled" (
+      lib.hasInfix ".codex/skills" homeManagerModuleText
+      && lib.hasInfix ".claude/skills" homeManagerModuleText
+      && lib.hasInfix ".kiro/skills" homeManagerModuleText
+      && lib.hasInfix ".gemini/commands" homeManagerModuleText
+      && lib.hasInfix "provider-artifacts.list" homeManagerModuleText
+      && lib.hasInfix "refusing to replace unmanaged provider artifact" homeManagerModuleText
+    ))
     (assert' "GIVEN a consumer needs runtime credentials WHEN the secret launcher is enabled THEN its package is installed explicitly" (
       lib.hasInfix "runtime-secrets.hm.nix" homeManagerModuleText
       && lib.hasInfix "secretLauncher.enable" secretsModuleText

@@ -107,6 +107,60 @@ in {
       run ${cfg.package}/bin/harness reconcile-guides \
         --project ${projectSource} \
         --workspace ${lib.escapeShellArg cfg.workspaceRoot}
+
+      generated=${lib.escapeShellArg cfg.outputDirectory}
+      ledger="$HOME/.config/agent-harness/activated/provider-artifacts.list"
+      next_ledger="$ledger.next"
+      run mkdir -p "$(dirname "$ledger")"
+      : > "$next_ledger"
+
+      activate_tree() {
+        provider="$1"
+        surface="$2"
+        target_root="$3"
+        source_root="$generated/$provider/$surface"
+        [ -d "$source_root" ] || return 0
+        run mkdir -p "$target_root"
+        for source in "$source_root"/*; do
+          [ -e "$source" ] || continue
+          target="$target_root/$(basename "$source")"
+          if [ -L "$target" ]; then
+            current="$(readlink "$target")"
+            if [ "$current" != "$source" ]; then
+              case "$current" in
+                "$generated"/*) ;;
+                *)
+                  echo "agent-harness: refusing to replace unmanaged provider artifact $target" >&2
+                  continue
+                  ;;
+              esac
+            fi
+            run rm "$target"
+          elif [ -e "$target" ]; then
+            echo "agent-harness: refusing to replace unmanaged provider artifact $target" >&2
+            continue
+          fi
+          run ln -s "$source" "$target"
+          printf '%s\t%s\n' "$target" "$source" >> "$next_ledger"
+        done
+      }
+
+      activate_tree codex skills "$HOME/.codex/skills"
+      activate_tree claude skills "$HOME/.claude/skills"
+      activate_tree kiro skills "$HOME/.kiro/skills"
+      activate_tree gemini commands "$HOME/.gemini/commands"
+
+      if [ -f "$ledger" ]; then
+        while IFS="$(printf '\t')" read -r target source; do
+          [ -n "$target" ] || continue
+          if ! grep -Fqx "$(printf '%s\t%s' "$target" "$source")" "$next_ledger" \
+            && [ -L "$target" ] \
+            && [ "$(readlink "$target")" = "$source" ]; then
+            run rm "$target"
+          fi
+        done < "$ledger"
+      fi
+      run mv "$next_ledger" "$ledger"
     '';
   };
 }
