@@ -26,7 +26,7 @@
     in {
       default = pkgs.writeShellApplication {
         name = "harness";
-        runtimeInputs = [pkgs.python3 pkgs.openssl];
+        runtimeInputs = [pkgs.python3 pkgs.openssl contractKernel];
         text = ''exec ${pkgs.python3}/bin/python3 ${self}/harness.py "$@"'';
         meta = {
           description = "Provider-neutral engineering agent harness";

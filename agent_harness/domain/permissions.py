@@ -5,10 +5,87 @@ from __future__ import annotations
 from pathlib import PurePosixPath
 CONTRACT_VERSION = 2
 KNOWN_PROVIDERS = {"codex", "claude", "gemini", "kiro"}
+OPERATIONS = {"read", "write", "execute", "delete", "connect"}
+MAX_U32 = 2**32 - 1
+MAX_U64 = 2**64 - 1
 
 
 def _nonempty(value) -> bool:
     return isinstance(value, str) and bool(value.strip())
+
+
+def validate_typed_request(request: dict) -> None:
+    """Reject values that cannot cross the Rust v2 serde boundary."""
+    if not isinstance(request, dict):
+        raise ValueError("decision request must be a JSON object")
+    string_fields = ("request_id", "task_id", "role", "agent", "provider", "policy_revision")
+    if any(not isinstance(request.get(field), str) for field in string_fields):
+        raise ValueError("decision request has an invalid string field")
+    if (
+        not isinstance(request.get("contract_version"), int)
+        or isinstance(request["contract_version"], bool)
+        or not 0 <= request["contract_version"] <= MAX_U32
+    ):
+        raise ValueError("decision request has an invalid contract_version")
+    if (
+        not isinstance(request.get("now"), int)
+        or isinstance(request["now"], bool)
+        or not 0 <= request["now"] <= MAX_U64
+    ):
+        raise ValueError("decision request has an invalid time")
+    if request.get("session_id") is not None and not isinstance(request["session_id"], str):
+        raise ValueError("decision request has an invalid session_id")
+    if any(not isinstance(request.get(field), bool) for field in (
+        "secret_access", "external_mutation", "provider_can_pause"
+    )):
+        raise ValueError("decision request has an invalid boolean field")
+    resource = request.get("resource")
+    if not isinstance(resource, dict) or not all(isinstance(resource.get(field), str) for field in (
+        "resource_type", "canonical_target", "operation"
+    )) or resource.get("resource_type") not in {"directory", "network"} or resource.get("operation") not in OPERATIONS:
+        raise ValueError("decision request has an invalid resource shape")
+    enforcement = request.get("enforcement")
+    if (
+        not isinstance(enforcement, dict)
+        or not isinstance(enforcement.get("status"), str)
+        or enforcement["status"] not in {"OBSERVED", "UNOBSERVED", "UNSUPPORTED"}
+        or not all(isinstance(enforcement.get(field), str) for field in (
+            "provider", "provider_version", "evidence_ref"
+        ))
+    ):
+        raise ValueError("decision request has an invalid enforcement shape")
+    grants = request.get("grants")
+    if not isinstance(grants, list):
+        raise ValueError("decision request grants must be a list")
+    for grant in grants:
+        grant_strings = (
+            "grant_id", "task_id", "role", "agent", "resource_type", "canonical_target",
+            "scope", "end_condition", "state", "approval_identity", "evidence_ref", "policy_revision",
+        )
+        if not isinstance(grant, dict) or any(not isinstance(grant.get(field), str) for field in grant_strings):
+            raise ValueError("decision request has an invalid grant shape")
+        if grant.get("session_id") is not None and not isinstance(grant["session_id"], str):
+            raise ValueError("decision request has an invalid grant session_id")
+        if grant.get("termination_evidence") is not None and not isinstance(grant["termination_evidence"], str):
+            raise ValueError("decision request has invalid termination evidence")
+        operations = grant.get("allowed_operations")
+        if not isinstance(operations, list) or any(
+            not isinstance(operation, str) or operation not in OPERATIONS
+            for operation in operations
+        ):
+            raise ValueError("decision request has invalid grant operations")
+        if (
+            not isinstance(grant.get("expires_at"), int)
+            or isinstance(grant["expires_at"], bool)
+            or not 0 <= grant["expires_at"] <= MAX_U64
+        ):
+            raise ValueError("decision request has an invalid grant expiry")
+        if grant["resource_type"] not in {"directory", "network"} or grant["scope"] not in {"task", "session"}:
+            raise ValueError("decision request has an invalid grant enum")
+        if grant["end_condition"] not in {"task_end", "session_end", "expiry"} or grant["state"] not in {
+            "ACTIVE", "REVOKED", "EXPIRED"
+        }:
+            raise ValueError("decision request has an invalid grant lifecycle enum")
 
 
 def _decision(request: dict, decision: str, reason_code: str, grant_id=None) -> dict:

@@ -10,6 +10,7 @@ import sys
 
 from agent_harness.control_plane.reconcile import export, plan, reconcile_guides, verify
 from agent_harness.domain.config import DEFAULT_PROJECT_GUIDE, HarnessError, PRESETS, PROVIDERS, ROOT, normalized
+from agent_harness.egress.kernel import compare_decisions
 from agent_harness.ingress.manifest import load_manifest, manifest_path, render_manifest
 
 PUBLIC_CONTRACT_VERSION = 1
@@ -66,6 +67,16 @@ def command_normalize(args: argparse.Namespace) -> dict:
     return normalized(load_manifest(args.project.resolve()))
 
 
+def command_compare_decision(args: argparse.Namespace) -> dict:
+    kernel = args.kernel or shutil.which("harness-contract-kernel")
+    if kernel is None:
+        raise HarnessError("harness-contract-kernel is required for shadow comparison")
+    request = json.loads(args.request.read_text())
+    if not isinstance(request, dict):
+        raise HarnessError("decision request must be a JSON object")
+    return compare_decisions(request, Path(kernel))
+
+
 def command_reconcile_guides(args: argparse.Namespace) -> dict:
     return reconcile_guides(
         args.project.resolve(),
@@ -88,6 +99,10 @@ def parser() -> argparse.ArgumentParser:
     normalize_command = sub.add_parser("normalize")
     normalize_command.add_argument("--project", type=Path, default=Path.cwd())
     normalize_command.set_defaults(handler=command_normalize)
+    compare_command = sub.add_parser("compare-decision")
+    compare_command.add_argument("--request", type=Path, required=True)
+    compare_command.add_argument("--kernel", type=Path)
+    compare_command.set_defaults(handler=command_compare_decision)
     guides_command = sub.add_parser("reconcile-guides")
     guides_command.add_argument("--project", type=Path, default=Path.cwd())
     guides_command.add_argument("--workspace", type=Path)

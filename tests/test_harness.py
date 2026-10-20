@@ -53,6 +53,7 @@ class HarnessTests(unittest.TestCase):
             "agent_harness/domain/permissions.py",
             "agent_harness/ingress/manifest.py",
             "agent_harness/control_plane/reconcile.py",
+            "agent_harness/egress/kernel.py",
             "agent_harness/egress/providers.py",
             "agent_harness/cli.py",
         }
