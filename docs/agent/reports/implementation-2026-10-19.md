@@ -1,4 +1,7 @@
-# Framework MVP implementation report
+# Historical Framework MVP implementation report
+
+This report captures the 2026-10-19 extraction baseline. Its command counts and
+repository state are historical evidence and do not establish current completion.
 
 ## Result
 

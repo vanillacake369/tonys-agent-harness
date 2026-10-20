@@ -36,7 +36,7 @@ and `verify`; Codex, Claude, Gemini, and Kiro are explicit exporter targets.
 
 ### FR-004 — Provider capability model
 
-- Status: in_progress
+- Status: implemented
 - Codex, Claude, Gemini, and Kiro expose explicit supported, adapted, or
   unsupported capabilities.
 - Unsupported mandatory enforcement fails verification instead of disappearing.
@@ -64,7 +64,7 @@ and `verify`; Codex, Claude, Gemini, and Kiro are explicit exporter targets.
 
 ### FR-008 — Nix consumption
 
-- Status: in_progress
+- Status: implemented
 - Expose a flake package/app, library metadata, and Home Manager module entry
   without embedding a machine username or home path.
 - The Home Manager adapter must consume the same normalized project manifest as
@@ -78,7 +78,7 @@ and `verify`; Codex, Claude, Gemini, and Kiro are explicit exporter targets.
 
 ### FR-010 — Cross-provider instruction SSoT
 
-- Status: in_progress
+- Status: implemented
 - Resolve the project-relative instruction file without allowing path traversal.
 - Export the same instruction bytes to every selected provider and include the
   instruction digest in stale-output detection.
@@ -87,7 +87,7 @@ and `verify`; Codex, Claude, Gemini, and Kiro are explicit exporter targets.
 
 ### FR-011 — Phase-complete engineering harness
 
-- Status: in_progress
+- Status: implemented
 - Implement and independently verify the Phase 0–5 contracts in
   `phase-0-5.md`.
 - Local implementation completion and native or operational verification are
@@ -105,7 +105,7 @@ and `verify`; Codex, Claude, Gemini, and Kiro are explicit exporter targets.
 - [x] `export` deterministically creates selected provider output in a staging
       directory.
 - [x] `verify` detects tampered generated output.
-- [ ] Only the canonical `${type}-${when}-${what}-${maintainer}` public skills
+- [x] Only the canonical `${type}-${when}-${what}-${maintainer}` public skills
       and commands are discoverable; internal routing and gates are not skills.
 - [x] Every selected provider receives the same project `AGENTS.md`, and the
       provider instruction gate detects drift.

@@ -72,20 +72,20 @@ are not required to follow this convention.
 
 ### PH-0101 — Single normalized configuration
 
-- Status: ready
+- Status: implemented
 - `agent-harness.toml` is parsed into one `NormalizedHarnessConfig` consumed by
   CLI, Home Manager, and every provider adapter.
 - Mandatory global policy cannot be weakened by project configuration.
 
 ### PH-0102 — Reconciliation status
 
-- Status: ready
+- Status: implemented
 - Plan/export/activation report desired digest, observed digest, generated
   inventory, warnings, failures, and provider status.
 
 ### PH-0103 — External project inputs
 
-- Status: ready
+- Status: implemented
 - Project specs default to `.codex/`.
 - Team guidelines are referenced through configurable source and link paths and
   are never copied or vendored.
@@ -94,7 +94,7 @@ are not required to follow this convention.
 
 ### PH-0104 — Home Manager parity
 
-- Status: ready
+- Status: implemented
 - Home Manager consumes the same normalized manifest and selected providers.
 - Disabled mode installs and activates nothing.
 
@@ -102,13 +102,13 @@ are not required to follow this convention.
 
 ### PH-0201 — Version-bound conformance
 
-- Status: ready
+- Status: implemented
 - Native evidence binds provider version, source digest, generated digest,
   activated path, command result, and observed denial or success.
 
 ### PH-0202 — Negative provider tests
 
-- Status: ready
+- Status: implemented
 - Codex, Claude, Gemini, and Kiro test instruction loading, sandbox boundaries,
   hook failure semantics, completion hooks, and reviewer write denial where the
   installed provider supports them.
@@ -116,7 +116,7 @@ are not required to follow this convention.
 
 ### PH-0203 — MCP authorization evidence
 
-- Status: ready
+- Status: implemented
 - MCP calls bind server, method, role, skill, risk, decision, operation,
   fingerprint, outcome, and evidence. Ambiguous outcomes remain `UNKNOWN`.
 
@@ -124,13 +124,13 @@ are not required to follow this convention.
 
 ### PH-0301 — Deterministic execution DAG
 
-- Status: ready
+- Status: implemented
 - A frozen plan produces a deterministic dependency graph with read-only
   research/review roles and exactly one repository writer.
 
 ### PH-0302 — TDD and completion integrity
 
-- Status: ready
+- Status: implemented
 - Red evidence precedes minimal implementation and Green verification.
 - Deleted, disabled, or hidden failing tests require independent review and
   cannot manufacture completion.
@@ -138,7 +138,7 @@ are not required to follow this convention.
 
 ### PH-0303 — Git and commit workflow
 
-- Status: ready
+- Status: implemented
 - `cmd-post-commit-ljh` analyzes repository history, proposes SRP commits,
   verifies each responsibility, stages only planned files or hunks, commits in
   repository-native convention, and records requirement-to-commit evidence.
@@ -148,7 +148,7 @@ are not required to follow this convention.
 
 ### PH-0401 — Local telemetry lifecycle
 
-- Status: ready
+- Status: implemented
 - Versioned JSONL events cover decisions, routes, approvals, tool outcomes,
   retries, reviews, completion, and external operations.
 - Local aggregation reports latency, retries, intervention, defects, and
@@ -156,13 +156,13 @@ are not required to follow this convention.
 
 ### PH-0402 — Memory lifecycle
 
-- Status: ready
+- Status: implemented
 - Session, daily, and durable memory are project-namespaced, secret-free,
   bounded, conflict-aware, expirable, and deletable.
 
 ### PH-0403 — Skill evaluation
 
-- Status: ready
+- Status: implemented
 - Skill changes require privacy-safe before/after fixtures and independent
   evaluation. Metrics cannot relax deterministic policy.
 
@@ -170,13 +170,13 @@ are not required to follow this convention.
 
 ### PH-0501 — External operation state machine
 
-- Status: ready
+- Status: implemented
 - Operations transition through `PLANNED → APPROVAL_REQUIRED → APPROVED →
   EXECUTING → SUCCEEDED|FAILED|UNKNOWN → VERIFIED|ROLLED_BACK|BLOCKED`.
 
 ### PH-0502 — Scoped execution contract
 
-- Status: ready
+- Status: implemented
 - Operation ID, provider, environment, target, request fingerprint, idempotency
   key, approval digest, credential profile, rollback, observation window, and
   verification evidence are mandatory.
@@ -185,7 +185,7 @@ are not required to follow this convention.
 
 ### PH-0503 — No implicit external authority
 
-- Status: ready
+- Status: implemented
 - `cmd-post-ship-ljh` prepares an operation but grants no execution permission.
 - Push, merge, deploy, migration, money movement, and external mutation require
   a valid external approval receipt. Without approval they remain

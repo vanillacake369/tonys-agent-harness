@@ -1,31 +1,31 @@
 repository	revision	phase	requirement_id	status	design	implementation	test	verification
-self	a0ee4b0	0	FR-001	implemented	docs/agent/prd/framework-mvp.md	harness.py:load_manifest,render_manifest	tests/test_harness.py:test_init_creates_manifest_and_never_overwrites;test_unknown_schema_version_fails_closed	python3 -m unittest discover -s tests -v
-self	a0ee4b0	0	FR-002	implemented	core/policy.toml	harness.py:validate_policy	tests/test_harness.py:test_policy_weakening_fails_closed	python3 -m unittest discover -s tests -v
-self	a0ee4b0	0	FR-003	implemented	docs/agent/prd/framework-mvp.md	harness.py:PRESETS	tests/test_harness.py:test_all_presets_plan	python3 -m unittest discover -s tests -v
-self	a0ee4b0	2	FR-004	in_progress	core/providers.toml	harness.py:target_files	tests/test_harness.py:test_export_contains_mandatory_enforcement_and_complete_skill_resources	UNVERIFIED:native provider matrix incomplete
-self	a0ee4b0	1	FR-005	implemented	docs/agent/adr/0001-core-exporter-boundary.md	harness.py:plan,export	tests/test_harness.py:test_plan_is_pure_and_export_is_deterministic	python3 -m unittest discover -s tests -v
-self	712dfa4	0	FR-006	verified	docs/agent/prd/phase-0-5.md	assets/skills;assets/commands	tests/test_harness.py:test_exact_public_asset_inventory	docs/agent/evidence/phase-0-verification.json
-self	a0ee4b0	0	FR-007	implemented	docs/agent/testing/framework-mvp.md	harness.py:verify	tests/test_harness.py:test_verify_detects_tampered_output	python3 -m unittest discover -s tests -v
-self	WORKTREE	1	FR-008	in_progress	docs/agent/prd/phase-0-5.md	nix/home-manager-module.nix	flake.nix:checks	UNVERIFIED:normalized manifest parity incomplete
-self	a0ee4b0	0	FR-009	implemented	docs/agent/adr/0001-core-exporter-boundary.md	README.md	n/a	git status --short
-self	WORKTREE	2	FR-010	in_progress	docs/agent/prd/phase-0-5.md	harness.py:instruction_content,source_digest,target_files;runtime/governance/provider-instructions-gate.sh	tests/test_harness.py:test_instruction_change_invalidates_export_and_provider_gate_detects_drift	UNVERIFIED:Claude and Gemini native loading incomplete
-self	WORKTREE	0	FR-011	in_progress	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	UNVERIFIED:Phase 0-5 implementation active
+self	a0ee4b0	0	FR-001	implemented	docs/agent/prd/framework-mvp.md	agent_harness/ingress/manifest.py	tests/test_harness.py	python3 -m unittest discover -s tests -v
+self	a0ee4b0	0	FR-002	implemented	core/policy.toml	agent_harness/ingress/manifest.py	tests/test_harness.py	python3 -m unittest discover -s tests -v
+self	a0ee4b0	0	FR-003	implemented	docs/agent/prd/framework-mvp.md	agent_harness/domain/config.py	tests/test_harness.py	python3 -m unittest discover -s tests -v
+self	c01d96a	2	FR-004	implemented	core/providers.toml	runtime/governance/provider-native-conformance.sh	tests/hooks/harness-remediation.bats	bats tests/hooks
+self	c8b6e9b	1	FR-005	implemented	docs/agent/adr/0001-core-exporter-boundary.md	agent_harness/control_plane/reconcile.py	tests/test_harness.py	python3 -m unittest discover -s tests -v
+self	712dfa4	0	FR-006	verified	docs/agent/prd/phase-0-5.md	assets/skills;assets/commands	tests/test_harness.py	docs/agent/evidence/phase-0-verification.json
+self	a0ee4b0	0	FR-007	implemented	docs/agent/testing/framework-mvp.md	agent_harness/control_plane/reconcile.py	tests/test_harness.py	python3 -m unittest discover -s tests -v
+self	409c517	1	FR-008	implemented	docs/agent/prd/phase-0-5.md	nix/home-manager-module.nix	tests/nix/agents.test.nix	UNVERIFIED:phase-1 aggregate pending
+self	a0ee4b0	0	FR-009	implemented	docs/agent/adr/0001-core-exporter-boundary.md	README.md	tests/test_harness.py	git status --short
+self	c01d96a	2	FR-010	implemented	docs/agent/prd/phase-0-5.md	agent_harness/domain/config.py;runtime/governance/provider-instructions-gate.sh	tests/test_harness.py	UNVERIFIED:phase-2 aggregate pending
+self	0a11d58	0	FR-011	implemented	docs/agent/prd/phase-0-5.md	runtime/orchestrator;runtime/governance	docs/agent/testing/phase-0-5.md	UNVERIFIED:phase-1-5 aggregates pending
 self	712dfa4	0	PH-0001	verified	docs/agent/prd/phase-0-5.md	docs/agent/prd/phase-0-5.md	docs/agent/testing/phase-0-5.md	docs/agent/evidence/phase-0-verification.json
 self	712dfa4	0	PH-0002	verified	docs/agent/prd/phase-0-5.md	runtime/orchestrator/traceability-gate.sh	tests/hooks/orchestrator-router.bats	docs/agent/evidence/phase-0-verification.json
 self	712dfa4	0	PH-0003	verified	docs/agent/prd/phase-0-5.md	docs/agent/evidence/phase-0-verification.json	docs/agent/testing/phase-0-5.md	docs/agent/evidence/phase-0-verification.json
-self	WORKTREE	1	PH-0101	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
-self	WORKTREE	1	PH-0102	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
-self	WORKTREE	1	PH-0103	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
-self	WORKTREE	1	PH-0104	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
-self	WORKTREE	2	PH-0201	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
-self	WORKTREE	2	PH-0202	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
-self	WORKTREE	2	PH-0203	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
-self	WORKTREE	3	PH-0301	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
-self	WORKTREE	3	PH-0302	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
-self	WORKTREE	3	PH-0303	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
-self	WORKTREE	4	PH-0401	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
-self	WORKTREE	4	PH-0402	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
-self	WORKTREE	4	PH-0403	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
-self	WORKTREE	5	PH-0501	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
-self	WORKTREE	5	PH-0502	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
-self	WORKTREE	5	PH-0503	ready	docs/agent/prd/phase-0-5.md	-	docs/agent/testing/phase-0-5.md	-
+self	c8b6e9b	1	PH-0101	implemented	docs/agent/prd/phase-0-5.md	agent_harness/domain/config.py;nix/normalize-config.nix	tests/test_harness.py;tests/nix/agents.test.nix	UNVERIFIED:phase-1 aggregate pending
+self	c8b6e9b	1	PH-0102	implemented	docs/agent/prd/phase-0-5.md	agent_harness/control_plane/reconcile.py	tests/test_harness.py	UNVERIFIED:phase-1 aggregate pending
+self	7769efd	1	PH-0103	implemented	docs/agent/prd/phase-0-5.md	agent_harness/ingress/manifest.py	tests/test_harness.py	UNVERIFIED:phase-1 aggregate pending
+self	409c517	1	PH-0104	implemented	docs/agent/prd/phase-0-5.md	nix/home-manager-module.nix	tests/nix/agents.test.nix	UNVERIFIED:phase-1 aggregate pending
+self	c01d96a	2	PH-0201	implemented	docs/agent/prd/phase-0-5.md	runtime/governance/provider-native-conformance.sh	tests/hooks/harness-remediation.bats	UNVERIFIED:phase-2 aggregate pending
+self	c01d96a	2	PH-0202	implemented	docs/agent/prd/phase-0-5.md	runtime/governance/provider-native-conformance.sh	tests/hooks/harness-remediation.bats	UNVERIFIED:phase-2 aggregate pending
+self	c01d96a	2	PH-0203	implemented	docs/agent/prd/phase-0-5.md	runtime/governance/mcp-hook.sh	tests/hooks/harness-remediation.bats	UNVERIFIED:phase-2 aggregate pending
+self	568c264	3	PH-0301	implemented	docs/agent/prd/phase-0-5.md	runtime/orchestrator/execution-plan.sh	tests/hooks/orchestrator-router.bats	UNVERIFIED:phase-3 aggregate pending
+self	0a11d58	3	PH-0302	implemented	docs/agent/prd/phase-0-5.md	runtime/governance/completion-gate.sh;runtime/governance/retry-budget.sh	tests/hooks/governance.bats;tests/hooks/harness-remediation.bats	UNVERIFIED:phase-3 aggregate pending
+self	0a11d58	3	PH-0303	implemented	docs/agent/prd/phase-0-5.md	assets/commands/cmd-post-commit-ljh.md;runtime/governance/git-lifecycle-gate.sh	tests/hooks/governance.bats	UNVERIFIED:phase-3 aggregate pending
+self	568c264	4	PH-0401	implemented	docs/agent/prd/phase-0-5.md	runtime/orchestrator/telemetry.sh;runtime/orchestrator/telemetry-summary.sh	tests/hooks/orchestrator-router.bats	UNVERIFIED:phase-4 aggregate pending
+self	0a11d58	4	PH-0402	implemented	docs/agent/prd/phase-0-5.md	runtime/governance/memory-lifecycle.sh	tests/hooks/harness-remediation.bats	UNVERIFIED:phase-4 aggregate pending
+self	0a11d58	4	PH-0403	implemented	docs/agent/prd/phase-0-5.md	runtime/governance/skill-evaluation-gate.sh	tests/hooks/harness-remediation.bats	UNVERIFIED:phase-4 aggregate pending
+self	0a11d58	5	PH-0501	implemented	docs/agent/prd/phase-0-5.md	runtime/governance/external-operation.sh	tests/hooks/harness-remediation.bats	UNVERIFIED:phase-5 aggregate pending
+self	0a11d58	5	PH-0502	implemented	docs/agent/prd/phase-0-5.md	runtime/governance/external-operation.sh;runtime/orchestrator/execution-authorize.sh	tests/hooks/harness-remediation.bats	UNVERIFIED:phase-5 aggregate pending
+self	0a11d58	5	PH-0503	implemented	docs/agent/prd/phase-0-5.md	assets/commands/cmd-post-ship-ljh.md;runtime/orchestrator/execution-plan.sh	tests/hooks/orchestrator-router.bats	UNVERIFIED:phase-5 aggregate pending
