@@ -11,7 +11,7 @@ migration itself.
 
 ### AH-261020-001 — Local engineering operations
 
-- Status: ready
+- Status: locally verified
 - Repository-local commits created through the verified commit workflow do not
   require an external-operation approval receipt.
 - Push, merge, release, deployment, migration, destructive commands, and
@@ -22,7 +22,7 @@ migration itself.
 
 ### AH-261020-002 — Path-guard precision
 
-- Status: ready
+- Status: locally verified
 - Sensitive path checks evaluate path-bearing command tokens and provider file
   fields, not arbitrary search text.
 - Searching documentation for words such as `secrets` or `credentials` is
@@ -32,7 +32,7 @@ migration itself.
 
 ### AH-261020-003 — Shell compatibility
 
-- Status: ready
+- Status: locally verified
 - Benign command substitution and backticks are not rejected solely because
   they are difficult to parse.
 - Known destructive or external operations nested in a shell command remain
@@ -40,7 +40,7 @@ migration itself.
 
 ### AH-261020-004 — Lifecycle lock recovery
 
-- Status: ready
+- Status: locally verified
 - Concurrent lifecycle state transitions remain serialized.
 - Lock ownership records process and creation metadata.
 - A dead owner cannot permanently block future sessions; a live owner is never
@@ -48,7 +48,7 @@ migration itself.
 
 ### AH-261020-005 — SRP commit contract
 
-- Status: ready
+- Status: locally verified
 - Commit planning runs before staging from an explicit responsibility plan.
 - Every responsibility has its own requirement IDs, files, verification
   command, and result commit.
@@ -57,7 +57,7 @@ migration itself.
 
 ### AH-261020-006 — Provider-native activation
 
-- Status: ready
+- Status: locally verified
 - Codex command facades and reusable procedures are Agent Skills under
   `~/.codex/skills/<name>/SKILL.md`.
 - Claude command facades and reusable procedures are Agent Skills under
