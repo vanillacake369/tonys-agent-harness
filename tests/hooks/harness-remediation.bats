@@ -246,6 +246,98 @@ JSON
   [ "$status" -eq 0 ]
 }
 
+@test "retry post hook ignores valid responses with unknown outcome" {
+  for shape in '"plain output"' '[{"type":"text","text":"plain output"}]' 'null' '{}'; do
+    state="$BATS_TEST_TMPDIR/retry-unknown-$(printf '%s' "$shape" | shasum | cut -d' ' -f1).json"
+    payload=$(jq -cn --argjson response "$shape" \
+      '{tool_name:"Bash",tool_input:{command:"true"},tool_response:$response}')
+
+    run env AGENT_RETRY_STATE="$state" AGENT_TASK_ID=unknown-task \
+      bash "$GOV/retry-hook.sh" post <<<"$payload"
+
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+    [ ! -e "$state" ]
+  done
+
+
+  state="$BATS_TEST_TMPDIR/retry-unknown-existing.json"
+  "$GOV/retry-budget.sh" record "$state" unknown-task fail existing 3 >/dev/null
+  before=$(shasum "$state")
+  payload='{"tool_name":"Bash","tool_input":{"command":"true"}}'
+
+  run env AGENT_RETRY_STATE="$state" AGENT_TASK_ID=unknown-task \
+    bash "$GOV/retry-hook.sh" post <<<"$payload"
+
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  [ "$(shasum "$state")" = "$before" ]
+}
+
+@test "retry post hook records object stdout and stderr with explicit exit code" {
+  state="$BATS_TEST_TMPDIR/retry-object-streams.json"
+  payload='{"tool_name":"Bash","tool_input":{"command":"just test"},"tool_response":{"exit_code":1,"stdout":"ok","stderr":"error: failed"}}'
+
+  run env AGENT_RETRY_STATE="$state" AGENT_TASK_ID=stream-task \
+    bash "$GOV/retry-hook.sh" post <<<"$payload"
+
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  run jq -e '.tasks["stream-task"].attempts == 1 and .tasks["stream-task"].last_reason == "error: failed"' "$state"
+  [ "$status" -eq 0 ]
+}
+
+@test "retry post hook lets explicit failure dominate a zero exit code" {
+  state="$BATS_TEST_TMPDIR/retry-conflict.json"
+  payload='{"tool_name":"Bash","tool_input":{"command":"true"},"tool_response":{"exit_code":0,"isError":true,"error":"provider failure"}}'
+
+  run env AGENT_RETRY_STATE="$state" AGENT_TASK_ID=conflict-task \
+    bash "$GOV/retry-hook.sh" post <<<"$payload"
+
+  [ "$status" -eq 0 ]
+  run jq -e '.tasks["conflict-task"].attempts == 1 and .tasks["conflict-task"].status == "ACTIVE"' "$state"
+  [ "$status" -eq 0 ]
+}
+
+@test "retry post hook lets any explicit nonzero exit code dominate" {
+  state="$BATS_TEST_TMPDIR/retry-exit-conflict.json"
+  payload='{"tool_name":"Bash","tool_exit_code":0,"exit_code":"0","tool_response":{"exit_code":7,"output":"command failed"}}'
+
+  run env AGENT_RETRY_STATE="$state" AGENT_TASK_ID=exit-conflict-task \
+    bash "$GOV/retry-hook.sh" post <<<"$payload"
+
+  [ "$status" -eq 0 ]
+  run jq -e '.tasks["exit-conflict-task"].attempts == 1 and .tasks["exit-conflict-task"].status == "ACTIVE"' "$state"
+  [ "$status" -eq 0 ]
+}
+
+@test "retry post hook accepts an explicit numeric string exit code" {
+  state="$BATS_TEST_TMPDIR/retry-string-exit.json"
+  payload='{"tool_name":"Bash","exit_code":"0","tool_response":"plain output"}'
+
+  run env AGENT_RETRY_STATE="$state" AGENT_TASK_ID=string-exit-task \
+    bash "$GOV/retry-hook.sh" post <<<"$payload"
+
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  run jq -e '.tasks["string-exit-task"].attempts == 0 and .tasks["string-exit-task"].status == "DONE"' "$state"
+  [ "$status" -eq 0 ]
+}
+
+@test "retry post hook still fails closed for malformed top-level input" {
+  run env AGENT_RETRY_STATE="$BATS_TEST_TMPDIR/retry-malformed.json" AGENT_TASK_ID=malformed-task \
+    bash "$GOV/retry-hook.sh" post <<<'[]'
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid payload"* ]]
+
+  run env AGENT_RETRY_STATE="$BATS_TEST_TMPDIR/retry-malformed-json.json" AGENT_TASK_ID=malformed-task \
+    bash "$GOV/retry-hook.sh" post <<<'{"tool_name":'
+
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid payload"* ]]
+}
+
 @test "pre-tool gate is silent on allow" {
   state="$BATS_TEST_TMPDIR/pre-tool-output.json"
   payload='{"cwd":"/tmp","tool_name":"Bash","tool_input":{"command":"printf safe"}}'

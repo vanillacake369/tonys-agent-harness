@@ -33,12 +33,76 @@ fi
 [[ "$MODE" == post || "$MODE" == failure ]] || { echo "retry hook: expected pre, post, or failure" >&2; exit 2; }
 if [[ "$MODE" == failure ]]; then
   exit_code=1
-  output=$(jq -r '.error // .tool_response.error // .tool_output // "provider tool failure"' <<<"$INPUT")
+  output=$(jq -r '
+    if (.error? | type) == "string" then .error
+    elif (.tool_response? | type) == "object" and (.tool_response.error? | type) == "string" then .tool_response.error
+    elif (.tool_output? | type) == "string" then .tool_output
+    else "provider tool failure"
+    end
+  ' <<<"$INPUT")
 else
-  exit_code=$(jq -r '.tool_exit_code // .tool_response.exit_code // .exit_code // 0' <<<"$INPUT")
-  output=$(jq -r '.tool_output // .tool_response.output // .output // ""' <<<"$INPUT")
+  normalized=$(jq -c '
+    def explicit_exit_codes:
+      [
+        .tool_exit_code?,
+        .exit_code?,
+        (if (.tool_response? | type) == "object" then .tool_response.exit_code? else null end)
+      ]
+      | map(select(
+          type == "number"
+          or (type == "string" and test("^-?[0-9]+$"))
+        ))
+      | map(tonumber);
+    def explicit_error:
+      (.isError? == true)
+      or (
+        (.tool_response? | type) == "object"
+        and (.tool_response.isError? == true)
+      );
+    def error_text:
+      if (.error? | type) == "string" then .error
+      elif (.tool_response? | type) == "object" and (.tool_response.error? | type) == "string" then .tool_response.error
+      else ""
+      end;
+    def stderr_text:
+      if (.tool_response? | type) == "object" and (.tool_response.stderr? | type) == "string" then .tool_response.stderr
+      else ""
+      end;
+    def response_output:
+      if (.tool_output? | type) == "string" then .tool_output
+      elif (.tool_response? | type) == "object" and (.tool_response.output? | type) == "string" then .tool_response.output
+      elif (.tool_response? | type) == "object"
+          and (((.tool_response.stdout? | type) == "string") or ((.tool_response.stderr? | type) == "string")) then
+        [
+          (if (.tool_response.stdout? | type) == "string" then .tool_response.stdout else empty end),
+          (if (.tool_response.stderr? | type) == "string" then .tool_response.stderr else empty end)
+        ] | join("\n")
+      elif (.output? | type) == "string" then .output
+      else ""
+      end;
+    explicit_exit_codes as $exit_codes
+    | explicit_error as $is_error
+    | error_text as $error
+    | stderr_text as $stderr
+    | response_output as $output
+    | if $is_error or any($exit_codes[]; . != 0) then
+        {
+          status:"failure",
+          exit_code:([$exit_codes[] | select(. != 0)] | first // 1),
+          output:(if $error != "" then $error elif $stderr != "" then $stderr else $output end)
+        }
+      elif ($exit_codes | length) == 0 then
+        {status:"unknown", exit_code:null, output:""}
+      else
+        {status:"success", exit_code:0, output:$output}
+      end
+  ' <<<"$INPUT")
+  status=$(jq -r '.status' <<<"$normalized")
+  [[ "$status" != unknown ]] || exit 0
+  exit_code=$(jq -r '.exit_code' <<<"$normalized")
+  output=$(jq -r '.output' <<<"$normalized")
 fi
-if [[ "$exit_code" != 0 ]] || grep -qiE '(^|\n)(error:|FAIL\b|fatal:|panic:|exception:)' <<<"$output"; then
+if [[ "${status:-failure}" == failure || "$exit_code" != 0 ]] || grep -qiE '^(error:|FAIL([^[:alnum:]_]|$)|fatal:|panic:|exception:)' <<<"$output"; then
   reason=$(sed -n '1p' <<<"$output" | cut -c1-160); [[ -n "$reason" ]] || reason="exit-$exit_code"
   outcome=fail
 else
