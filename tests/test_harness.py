@@ -50,6 +50,7 @@ class HarnessTests(unittest.TestCase):
 
         expected_modules = {
             "agent_harness/domain/config.py",
+            "agent_harness/domain/permissions.py",
             "agent_harness/ingress/manifest.py",
             "agent_harness/control_plane/reconcile.py",
             "agent_harness/egress/providers.py",

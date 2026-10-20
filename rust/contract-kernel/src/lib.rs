@@ -321,7 +321,10 @@ fn valid_network_target(value: &str) -> bool {
                     .chars()
                     .all(|character| character.is_ascii_alphanumeric() || character == '-')
         });
-    let port_is_valid = port_text.parse::<u16>().is_ok_and(|port| port != 0);
+    let port_is_valid = port_text
+        .chars()
+        .all(|character| character.is_ascii_digit())
+        && port_text.parse::<u16>().is_ok_and(|port| port != 0);
     host_is_valid && port_is_valid
 }
 
