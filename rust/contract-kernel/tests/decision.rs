@@ -1,6 +1,6 @@
 use harness_contract_kernel::{
     CONTRACT_VERSION, DecisionKind, DecisionRequest, EnforcementObservation, EnforcementStatus,
-    Grant, Resource, ResourceType, decide,
+    Grant, GrantScope, LeaseEndCondition, Operation, Resource, ResourceType, decide,
 };
 
 fn request() -> DecisionRequest {
@@ -17,7 +17,7 @@ fn request() -> DecisionRequest {
         resource: Resource {
             resource_type: ResourceType::Directory,
             canonical_target: "/workspace/project".into(),
-            operation: "write".into(),
+            operation: Operation::Write,
         },
         secret_access: false,
         external_mutation: false,
@@ -36,10 +36,10 @@ fn request() -> DecisionRequest {
             agent: "codex".into(),
             resource_type: ResourceType::Directory,
             canonical_target: "/workspace/project".into(),
-            allowed_operations: vec!["read".into(), "write".into()],
-            scope: "task".into(),
+            allowed_operations: vec![Operation::Read, Operation::Write],
+            scope: GrantScope::Task,
             expires_at: 200,
-            end_condition: "task_end".into(),
+            end_condition: LeaseEndCondition::TaskEnd,
             revoked: false,
             approval_identity: "human:owner".into(),
             evidence_ref: "evidence:approval-1".into(),
@@ -74,12 +74,30 @@ fn network_grant_matches_only_the_exact_canonical_target() {
     let mut input = request();
     input.resource.resource_type = ResourceType::Network;
     input.resource.canonical_target = "https://api.example.test:443".into();
+    input.resource.operation = Operation::Connect;
     input.grants[0].resource_type = ResourceType::Network;
     input.grants[0].canonical_target = "https://api.example.test:443".into();
+    input.grants[0].allowed_operations = vec![Operation::Connect];
     assert_eq!(decide(&input).decision, DecisionKind::Allow);
 
     input.resource.canonical_target = "https://redirect.example.test:443".into();
     assert_eq!(decide(&input).decision, DecisionKind::Ask);
+}
+
+#[test]
+fn malformed_network_authorities_fail_closed() {
+    for target in [
+        "https://::443",
+        "https://api example.test:443",
+        "https://api.example.test:0",
+        "ftp://api.example.test:21",
+    ] {
+        let mut input = request();
+        input.resource.resource_type = ResourceType::Network;
+        input.resource.canonical_target = target.into();
+        input.resource.operation = Operation::Connect;
+        assert_eq!(decide(&input).decision, DecisionKind::Deny, "{target}");
+    }
 }
 
 #[test]
@@ -107,13 +125,29 @@ fn expired_revoked_or_identity_mismatched_grants_do_not_allow() {
     let mut other_task = request();
     other_task.grants[0].task_id = "task-2".into();
     cases.push(other_task);
-    let mut other_session = request();
-    other_session.grants[0].session_id = Some("session-2".into());
-    cases.push(other_session);
-
     for input in cases {
         assert_eq!(decide(&input).decision, DecisionKind::Ask);
     }
+}
+
+#[test]
+fn task_scope_spans_sessions_but_session_scope_does_not() {
+    let mut task_scope = request();
+    task_scope.grants[0].session_id = Some("session-2".into());
+    assert_eq!(decide(&task_scope).decision, DecisionKind::Allow);
+
+    let mut session_scope = task_scope;
+    session_scope.grants[0].scope = GrantScope::Session;
+    session_scope.grants[0].end_condition = LeaseEndCondition::SessionEnd;
+    assert_eq!(decide(&session_scope).decision, DecisionKind::Ask);
+}
+
+#[test]
+fn invariant_reason_dominates_invalid_enforcement_evidence() {
+    let mut input = request();
+    input.secret_access = true;
+    input.enforcement.evidence_ref.clear();
+    assert_eq!(decide(&input).reason_code, "secret_access_forbidden");
 }
 
 #[test]
@@ -146,6 +180,7 @@ fn invalid_resource_shapes_fail_closed() {
     let mut network = request();
     network.resource.resource_type = ResourceType::Network;
     network.resource.canonical_target = "https://api.example.test".into();
+    network.resource.operation = Operation::Connect;
     assert_eq!(decide(&network).decision, DecisionKind::Deny);
 }
 

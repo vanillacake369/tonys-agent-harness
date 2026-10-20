@@ -11,10 +11,35 @@ pub enum ResourceType {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Operation {
+    Read,
+    Write,
+    Execute,
+    Delete,
+    Connect,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GrantScope {
+    Task,
+    Session,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LeaseEndCondition {
+    TaskEnd,
+    SessionEnd,
+    Expiry,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct Resource {
     pub resource_type: ResourceType,
     pub canonical_target: String,
-    pub operation: String,
+    pub operation: Operation,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
@@ -26,10 +51,10 @@ pub struct Grant {
     pub agent: String,
     pub resource_type: ResourceType,
     pub canonical_target: String,
-    pub allowed_operations: Vec<String>,
-    pub scope: String,
+    pub allowed_operations: Vec<Operation>,
+    pub scope: GrantScope,
     pub expires_at: u64,
-    pub end_condition: String,
+    pub end_condition: LeaseEndCondition,
     pub revoked: bool,
     pub approval_identity: String,
     pub evidence_ref: String,
@@ -134,18 +159,35 @@ fn valid_network_target(value: &str) -> bool {
     if !matches!(scheme, "http" | "https") || authority.contains(['/', '?', '#', '@']) {
         return false;
     }
-    let Some((host, port)) = authority.rsplit_once(':') else {
+    let Some((host, port_text)) = authority.rsplit_once(':') else {
         return false;
     };
-    nonempty(host) && port.parse::<u16>().is_ok()
+    let host_is_valid = nonempty(host)
+        && !host.starts_with(['-', '.'])
+        && !host.ends_with(['-', '.'])
+        && host.split('.').all(|label| {
+            nonempty(label)
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label
+                    .chars()
+                    .all(|character| character.is_ascii_alphanumeric() || character == '-')
+        });
+    let port_is_valid = port_text.parse::<u16>().is_ok_and(|port| port != 0);
+    host_is_valid && port_is_valid
 }
 
 fn valid_resource(resource: &Resource) -> bool {
-    nonempty(&resource.operation)
-        && match resource.resource_type {
-            ResourceType::Directory => valid_directory_target(&resource.canonical_target),
-            ResourceType::Network => valid_network_target(&resource.canonical_target),
+    match resource.resource_type {
+        ResourceType::Directory => {
+            resource.operation != Operation::Connect
+                && valid_directory_target(&resource.canonical_target)
         }
+        ResourceType::Network => {
+            resource.operation == Operation::Connect
+                && valid_network_target(&resource.canonical_target)
+        }
+    }
 }
 
 fn valid_grant(grant: &Grant, policy_revision: &str) -> bool {
@@ -153,13 +195,30 @@ fn valid_grant(grant: &Grant, policy_revision: &str) -> bool {
         && nonempty(&grant.task_id)
         && nonempty(&grant.role)
         && nonempty(&grant.agent)
-        && nonempty(&grant.scope)
-        && nonempty(&grant.end_condition)
         && nonempty(&grant.approval_identity)
         && nonempty(&grant.evidence_ref)
         && grant.policy_revision == policy_revision
         && !grant.allowed_operations.is_empty()
-        && grant.allowed_operations.iter().all(|value| nonempty(value))
+        && grant
+            .allowed_operations
+            .iter()
+            .all(|operation| match grant.resource_type {
+                ResourceType::Directory => operation != &Operation::Connect,
+                ResourceType::Network => operation == &Operation::Connect,
+            })
+        && match grant.scope {
+            GrantScope::Task => matches!(
+                grant.end_condition,
+                LeaseEndCondition::TaskEnd | LeaseEndCondition::Expiry
+            ),
+            GrantScope::Session => {
+                grant.session_id.is_some()
+                    && matches!(
+                        grant.end_condition,
+                        LeaseEndCondition::SessionEnd | LeaseEndCondition::Expiry
+                    )
+            }
+        }
         && valid_resource(&Resource {
             resource_type: grant.resource_type.clone(),
             canonical_target: grant.canonical_target.clone(),
@@ -177,6 +236,16 @@ fn resource_matches(grant: &Grant, requested: &Resource) -> bool {
         }
         ResourceType::Network => grant.canonical_target == requested.canonical_target,
     }
+}
+
+fn identity_matches(grant: &Grant, request: &DecisionRequest) -> bool {
+    grant.task_id == request.task_id
+        && grant.role == request.role
+        && grant.agent == request.agent
+        && match grant.scope {
+            GrantScope::Task => true,
+            GrantScope::Session => grant.session_id == request.session_id,
+        }
 }
 
 pub fn decide(request: &DecisionRequest) -> Decision {
@@ -198,6 +267,17 @@ pub fn decide(request: &DecisionRequest) -> Decision {
     {
         return decision(request, DecisionKind::Deny, "invalid_request", None);
     }
+    if request.secret_access {
+        return decision(request, DecisionKind::Deny, "secret_access_forbidden", None);
+    }
+    if request.external_mutation {
+        return decision(
+            request,
+            DecisionKind::Deny,
+            "external_mutation_requires_operation_approval",
+            None,
+        );
+    }
     if !matches!(
         request.provider.as_str(),
         "codex" | "claude" | "gemini" | "kiro"
@@ -212,26 +292,11 @@ pub fn decide(request: &DecisionRequest) -> Decision {
             None,
         );
     }
-    if request.secret_access {
-        return decision(request, DecisionKind::Deny, "secret_access_forbidden", None);
-    }
-    if request.external_mutation {
-        return decision(
-            request,
-            DecisionKind::Deny,
-            "external_mutation_requires_operation_approval",
-            None,
-        );
-    }
-
     let grant = request.grants.iter().find(|grant| {
         valid_grant(grant, &request.policy_revision)
             && !grant.revoked
             && grant.expires_at > request.now
-            && grant.task_id == request.task_id
-            && grant.session_id == request.session_id
-            && grant.role == request.role
-            && grant.agent == request.agent
+            && identity_matches(grant, request)
             && resource_matches(grant, &request.resource)
             && grant
                 .allowed_operations
