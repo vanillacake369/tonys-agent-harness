@@ -44,6 +44,16 @@
       ];
       validation = ["guard-tests"];
     };
+    dynamic_permissions = {
+      intent = "generated";
+      implementation = "unsupported";
+      enforcement = "unenforceable";
+      lossiness = ["directory and network grants cannot be applied or observed through a documented Codex runtime contract"];
+      artifacts = [];
+      diagnostics = ["runtime grant mutation is not established by official documentation"];
+      handled_permission_fields = [];
+      validation = ["official-docs-review" "guard-tests"];
+    };
     hooks = {
       intent = "provider_owned";
       implementation = "provider-owned";

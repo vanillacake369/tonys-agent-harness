@@ -303,6 +303,13 @@ in {
       && builtins.elem "secret_access" capabilityReport.providers.codex.surfaces.permissions.handled_permission_fields
       && capabilityReport.providers.codex.surfaces.permissions.enforcement == "enforced"
     ))
+    (assert' "GIVEN a dynamic permission grant WHEN Codex capabilities are reported THEN unsupported enforcement is explicit" (
+      capabilityReport.providers.codex.surfaces.dynamic_permissions.implementation == "unsupported"
+      && capabilityReport.providers.codex.surfaces.dynamic_permissions.enforcement == "unenforceable"
+      && capabilityReport.providers.codex.surfaces.dynamic_permissions.handled_permission_fields == []
+      && builtins.elem "runtime grant mutation is not established by official documentation"
+      capabilityReport.providers.codex.surfaces.dynamic_permissions.diagnostics
+    ))
     (assert' "GIVEN capability report WHEN Kiro is active THEN generated surfaces are reported" (
       capabilityReport.providers.kiro.surfaces.skills.implementation
       == "generated"
