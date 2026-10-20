@@ -246,12 +246,13 @@ JSON
   [ "$status" -eq 0 ]
 }
 
-@test "pre-tool gate emits no unsupported Codex JSON on allow" {
+@test "pre-tool gate emits the supported Codex allow envelope" {
   state="$BATS_TEST_TMPDIR/pre-tool-output.json"
   payload='{"cwd":"/tmp","tool_name":"Bash","tool_input":{"command":"printf safe"}}'
   run env AGENT_RETRY_STATE="$state" AGENT_TASK_ID=pre-tool-task bash "$GOV/pre-tool-gate.sh" <<<"$payload"
   [ "$status" -eq 0 ]
-  [ -z "$output" ]
+  run jq -e '.hookSpecificOutput.hookEventName == "PreToolUse" and .hookSpecificOutput.permissionDecision == "allow"' <<<"$output"
+  [ "$status" -eq 0 ]
 }
 
 @test "provider failure event increments the shared retry budget" {
