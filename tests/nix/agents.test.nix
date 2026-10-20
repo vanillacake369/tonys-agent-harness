@@ -17,13 +17,40 @@
     project = {
       instruction = "AGENTS.md";
       spec_root = ".codex";
-      guides = {enabled = true; source = "/tmp/team-guidelines"; link = ".agent-context/team-guides";};
+      guides = {
+        enabled = true;
+        source = "/tmp/team-guidelines";
+        link = ".agent-context/team-guides";
+      };
     };
-    providers = {codex = true; claude = false; gemini = true; kiro = true;};
-    workflow = {public_commands = ["cmd-mid-work-ljh"]; roles = ["implementer" "reviewer"];};
-    permissions = {secret_access = "deny"; reviewer_write = false; researcher_write = false; single_writer = true;};
-    approval = {production = true; destructive = true; migration = true; external_mutation = true; public_key_path = "/tmp/public.pem"; expected_fingerprint = "";};
-    verification = {retry_max = 3; require_clean_git_for_done = true;};
+    providers = {
+      codex = true;
+      claude = false;
+      gemini = true;
+      kiro = true;
+    };
+    workflow = {
+      public_commands = ["cmd-mid-work-ljh"];
+      roles = ["implementer" "reviewer"];
+    };
+    permissions = {
+      secret_access = "deny";
+      reviewer_write = false;
+      researcher_write = false;
+      single_writer = true;
+    };
+    approval = {
+      production = true;
+      destructive = true;
+      migration = true;
+      external_mutation = true;
+      public_key_path = "/tmp/public.pem";
+      expected_fingerprint = "";
+    };
+    verification = {
+      retry_max = 3;
+      require_clean_git_for_done = true;
+    };
   };
   normalizedFixture = normalizeConfig (builtins.fromTOML (builtins.readFile ../fixtures/agent-harness.toml));
   expectedNormalizedFixture = builtins.fromJSON (builtins.readFile ../fixtures/normalized-config.json);
@@ -76,7 +103,8 @@ in {
   # GWT 문장을 test name으로 써서 어떤 계약 경계가 깨졌는지 바로 읽히게 유지한다.
   results = [
     (assert' "GIVEN one manifest WHEN Nix normalizes it THEN provider and project selections are preserved" (
-      normalizedHarness.providers == ["codex" "gemini" "kiro"]
+      normalizedHarness.providers
+      == ["codex" "gemini" "kiro"]
       && normalizedHarness.project.spec_root == ".codex"
       && normalizedHarness.project.guides.enabled
       && normalizedHarness.approval.public_key_path == "/tmp/public.pem"
@@ -89,6 +117,16 @@ in {
       && lib.hasInfix "lib.mkIf cfg.enable" homeManagerModuleText
       && lib.hasInfix "harness export" homeManagerModuleText
       && lib.hasInfix "reconcile-guides" homeManagerModuleText
+    ))
+    (assert' "GIVEN the Home Manager adapter WHEN enabled THEN immutable input and editable workspace stay separate" (
+      lib.hasInfix "workspaceRoot" homeManagerModuleText
+      && lib.hasInfix "projectSource" homeManagerModuleText
+      && lib.hasInfix "--workspace" homeManagerModuleText
+    ))
+    (assert' "GIVEN provider hooks WHEN Home Manager activates THEN every shared runtime hook is installed" (
+      lib.hasInfix ".config/agents" homeManagerModuleText
+      && lib.hasInfix "runtimeFiles" homeManagerModuleText
+      && lib.hasInfix "agent-notify.sh" homeManagerModuleText
     ))
     (assert' "GIVEN MCP source WHEN rendering Codex stdio server THEN enabled flag is present" (
       rendered.codex.test-server.enabled == true

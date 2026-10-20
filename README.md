@@ -86,6 +86,27 @@ Without `--output`, generated files are written below the selected project at
 Generated governance scripts also expect common engineering tools such as
 `bash`, `git`, `jq`, and `openssl` when the corresponding gates run.
 
+### With Home Manager
+
+The adapter keeps immutable configuration input separate from the editable
+checkout used for workspace links:
+
+```nix
+programs.tonys-agent-harness = {
+  enable = true;
+  manifest = ./agent-harness.toml;
+  instruction = ./AGENTS.md;
+  workspaceRoot = "${config.home.homeDirectory}/dev/example";
+};
+```
+
+`manifest` and `instruction` are copied into a retained Nix store artifact.
+`workspaceRoot` is used only for explicitly configured reconciliation such as
+the team-guidelines symlink. Shared hook runtimes are installed under
+`~/.config/agents`; generated provider bundles remain under
+`~/.config/agent-harness/generated` for verification and consumer-controlled
+provider activation.
+
 ### Choose a preset
 
 | Preset | Intended use |

@@ -96,6 +96,10 @@ are not required to follow this convention.
 
 - Status: verified
 - Home Manager consumes the same normalized manifest and selected providers.
+- Immutable manifest/instruction inputs and the editable workspace are separate
+  interfaces; activation never writes into a Nix store source.
+- Shared hook runtimes referenced by provider adapters are present after
+  activation.
 - Disabled mode installs and activates nothing.
 
 ## Phase 2 — Provider-Native Enforcement
