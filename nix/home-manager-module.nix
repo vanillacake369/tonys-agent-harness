@@ -31,7 +31,7 @@ in {
     normalizedConfig = lib.mkOption {
       type = lib.types.nullOr lib.types.attrs;
       readOnly = true;
-      default = null;
+      default = normalized;
       description = "Normalized manifest projected by the Home Manager adapter.";
     };
   };
@@ -41,7 +41,6 @@ in {
       assertion = cfg.projectRoot != null && cfg.manifest != null;
       message = "tonys-agent-harness requires projectRoot and manifest when enabled";
     }];
-    programs.tonys-agent-harness.normalizedConfig = normalized;
     home.packages = [cfg.package];
     xdg.configFile."agent-harness/normalized.json".source = normalizedFile;
     home.activation.reconcileAgentHarness = lib.hm.dag.entryAfter ["writeBoundary"] ''
