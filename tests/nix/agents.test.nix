@@ -10,6 +10,23 @@
   geminiRender = import ../../nix/agents/providers/gemini/render.nix {inherit lib;};
   kiroRender = import ../../nix/agents/providers/kiro/render.nix {inherit lib;};
   claudeBaseSettings = builtins.fromJSON (builtins.readFile ../../nix/agents/providers/claude/settings.json);
+  normalizeConfig = import ../../nix/normalize-config.nix {inherit lib;};
+  normalizedHarness = normalizeConfig {
+    schema_version = 1;
+    preset = "infra-devops";
+    project = {
+      instruction = "AGENTS.md";
+      spec_root = ".codex";
+      guides = {enabled = true; source = "/tmp/team-guidelines"; link = ".agent-context/team-guides";};
+    };
+    providers = {codex = true; claude = false; gemini = true; kiro = true;};
+    workflow = {public_commands = ["cmd-mid-work-ljh"]; roles = ["implementer" "reviewer"];};
+    permissions = {secret_access = "deny"; reviewer_write = false; researcher_write = false; single_writer = true;};
+    approval = {production = true; destructive = true; migration = true; external_mutation = true; public_key_path = "/tmp/public.pem"; expected_fingerprint = "";};
+    verification = {retry_max = 3; require_clean_git_for_done = true;};
+  };
+  normalizedFixture = normalizeConfig (builtins.fromTOML (builtins.readFile ../fixtures/agent-harness.toml));
+  expectedNormalizedFixture = builtins.fromJSON (builtins.readFile ../fixtures/normalized-config.json);
 
   assert' = name: cond:
     if cond
@@ -38,6 +55,7 @@
   rendered = mcpRender mockServers;
   guideText = builtins.readFile ../../AGENTS.md;
   moduleText = builtins.readFile ../../nix/agents/runtime-module.hm.nix;
+  homeManagerModuleText = builtins.readFile ../../nix/home-manager-module.nix;
   secretsModuleText = builtins.readFile ../../nix/agents/runtime-secrets.hm.nix;
   roleNames = builtins.attrNames codexBindings.roles;
   publicRoleNames = builtins.attrNames codexBindings.publicRoles;
@@ -57,6 +75,21 @@ in {
   # 이 guard는 provider 출력이 contract에서 벗어나는 순간 Nix 평가 단계에서 실패하게 한다.
   # GWT 문장을 test name으로 써서 어떤 계약 경계가 깨졌는지 바로 읽히게 유지한다.
   results = [
+    (assert' "GIVEN one manifest WHEN Nix normalizes it THEN provider and project selections are preserved" (
+      normalizedHarness.providers == ["codex" "gemini" "kiro"]
+      && normalizedHarness.project.spec_root == ".codex"
+      && normalizedHarness.project.guides.enabled
+      && normalizedHarness.approval.public_key_path == "/tmp/public.pem"
+    ))
+    (assert' "GIVEN the shared fixture WHEN Python and Nix normalize THEN Nix matches the canonical JSON" (
+      normalizedFixture == expectedNormalizedFixture
+    ))
+    (assert' "GIVEN the Home Manager adapter WHEN disabled THEN runtime modules are not imported unconditionally" (
+      !(lib.hasInfix "runtime-module.hm.nix" homeManagerModuleText)
+      && lib.hasInfix "lib.mkIf cfg.enable" homeManagerModuleText
+      && lib.hasInfix "harness export" homeManagerModuleText
+      && lib.hasInfix "reconcile-guides" homeManagerModuleText
+    ))
     (assert' "GIVEN MCP source WHEN rendering Codex stdio server THEN enabled flag is present" (
       rendered.codex.test-server.enabled == true
     ))
