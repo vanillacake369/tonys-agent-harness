@@ -58,7 +58,14 @@ if [[ "$COMMAND" == "transition" && ($# -eq 5 || $# -eq 6) ]]; then
     digest=$(jq -r --arg op "$OP" '.operations[$op].approval_digest' "$REGISTRY")
     action=$(jq -r --arg op "$OP" '.operations[$op].action' "$REGISTRY")
     environment=$(jq -r --arg op "$OP" '.operations[$op].environment' "$REGISTRY")
-    "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/approval-gate.sh" \
+    trusted_home=$(python3 - <<'PY'
+import os, pwd
+print(pwd.getpwuid(os.getuid()).pw_dir)
+PY
+    )
+    trusted_key="$trusted_home/.config/agents/trust/approval-public.pem"
+    env -u AGENT_APPROVAL_PUBLIC_KEY AGENT_APPROVAL_PUBLIC_KEY="$trusted_key" \
+      "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/approval-gate.sh" \
       --repo "$repo" --receipt "$receipt" --digest "$digest" \
       --action "$action" --environment "$environment" >/dev/null
   fi

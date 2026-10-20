@@ -53,7 +53,7 @@ JSON
   cat > "$evidence" <<'JSON'
 {"status":"DONE","requirements":[{"id":"FR-1","result":"pass"}],"commands":[{"command":"test","exit_code":0,"duration_ms":1,"result":"synthetic fixture"}],"changed_files":["a.txt"],"diff_summary":"changed","unresolved_errors":[],"commit":"abc"}
 JSON
-  printf '%s\n' '{"requirement_id":"FR-1","red":{"sequence":1,"command":"test","exit_code":1,"result":"red"},"green":{"sequence":2,"command":"test","exit_code":0,"result":"green"},"exemption":null}' > "$BATS_TEST_TMPDIR/dirty-tdd.json"
+  printf '%s\n' '{"requirement_id":"FR-1","red":{"sequence":1,"command":"test","exit_code":1,"result":"red","executed_commit":"null"},"green":{"sequence":2,"command":"test","exit_code":0,"result":"green","executed_commit":"abc"},"exemption":null}' > "$BATS_TEST_TMPDIR/dirty-tdd.json"
   run env AGENT_TDD_EVIDENCE="$BATS_TEST_TMPDIR/dirty-tdd.json" "$COMPLETION" --repo "$repo" --mode code --scope <(printf 'a.txt\n') --evidence "$evidence"
   [ "$status" -eq 2 ]
   [[ "$output" == *'uncommitted'* ]]

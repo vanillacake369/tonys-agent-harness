@@ -33,7 +33,10 @@ TDD_EVIDENCE=${AGENT_TDD_EVIDENCE:-}
 [[ -n "$TDD_EVIDENCE" && -f "$TDD_EVIDENCE" ]] || {
   echo "completion blocked: Red-before-Green TDD evidence required" >&2; exit 2;
 }
-"$ROOT/tdd-evidence-gate.sh" < "$TDD_EVIDENCE" >/dev/null
+requirements=$(jq -c '[.requirements[].id]' "$EVIDENCE")
+"$ROOT/tdd-evidence-gate.sh" --requirements-json "$requirements" \
+  --green-commit "$(jq -r .commit "$EVIDENCE")" \
+  --baseline "$(jq -r .baseline_commit "$EVIDENCE")" < "$TDD_EVIDENCE" >/dev/null
 "$ROOT/git-lifecycle-gate.sh" --repo "$REPO" --mode "$MODE" --scope "$SCOPE" --evidence "$EVIDENCE"
 if [[ "$MODE" == code ]] && ! jq -e '. as $e | .worktree_clean == true and
   all(.commands[]; .executed_commit == $e.commit)' "$EVIDENCE" >/dev/null; then

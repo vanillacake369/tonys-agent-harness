@@ -146,8 +146,29 @@ PY
     [[ -f "$path" ]] || { echo "memory not found" >&2; exit 2; }
     target_path="$ROOT/$NAMESPACE/$TARGET/$ID.json"
     check_path "$target_path"
+    expires=$(jq -r '.expires_at // ""' "$path")
+    if [[ -n "$expires" ]] && ! python3 - "$expires" <<'PY'
+from datetime import datetime, timezone
+import sys
+expires = datetime.fromisoformat(sys.argv[1].replace("Z", "+00:00"))
+raise SystemExit(0 if expires > datetime.now(timezone.utc) else 2)
+PY
+    then
+      echo "memory promotion blocked: source expired" >&2; exit 2
+    fi
+    expected_target_revision=${7:-}
+    target_revision=1
+    if [[ -f "$target_path" ]]; then
+      current_target_revision=$(jq -er '.revision // 1' "$target_path") || { echo "invalid target memory" >&2; exit 2; }
+      if [[ -z "$expected_target_revision" || "$expected_target_revision" != "$current_target_revision" ]]; then
+        echo "memory promotion conflict: expected target revision required" >&2; exit 2
+      fi
+      target_revision=$((current_target_revision + 1))
+    elif [[ -n "$expected_target_revision" ]]; then
+      echo "memory promotion conflict: target does not exist" >&2; exit 2
+    fi
     validate_content "$(jq -c .content "$path")" "$TARGET"
-    atomic_json_write "$target_path" --arg kind "$TARGET" '.kind=$kind' "$path"
+    atomic_json_write "$target_path" --arg kind "$TARGET" --argjson revision "$target_revision" '.kind=$kind | .revision=$revision' "$path"
     echo "memory promoted: $NAMESPACE/$TARGET/$ID"
     ;;
   stale)
