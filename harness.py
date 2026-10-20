@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 import tempfile
 import tomllib
@@ -218,7 +219,20 @@ def approval_trust_status(project: Path, config: dict) -> str:
         return "UNPROVISIONED"
     if _inside(path, project):
         raise HarnessError("approval public key must stay outside the project")
-    actual = hashlib.sha256(path.read_bytes()).hexdigest()
+    pem = path.read_bytes()
+    if b"-----BEGIN PUBLIC KEY-----" not in pem or b"PRIVATE KEY" in pem:
+        raise HarnessError("approval trust path must contain a valid public key")
+    openssl = shutil.which("openssl")
+    if openssl is None:
+        raise HarnessError("openssl is required to validate the approval public key")
+    validation = subprocess.run(
+        [openssl, "pkey", "-pubin", "-in", str(path), "-noout"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if validation.returncode != 0:
+        raise HarnessError("approval trust path must contain a valid public key")
+    actual = hashlib.sha256(pem).hexdigest()
     expected = approval.get("expected_fingerprint", "")
     if expected and actual != expected.lower():
         raise HarnessError("approval public key fingerprint mismatch")

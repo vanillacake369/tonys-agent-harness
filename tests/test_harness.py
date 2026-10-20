@@ -87,7 +87,9 @@ class HarnessTests(unittest.TestCase):
             project = Path(raw) / "project"
             project.mkdir()
             trust = Path(raw) / "approval-public.pem"
-            trust.write_text("fixture-public-key\n")
+            private = Path(raw) / "approval-private.pem"
+            subprocess.run(["openssl", "genrsa", "-out", str(private), "2048"], check=True, capture_output=True)
+            subprocess.run(["openssl", "pkey", "-in", str(private), "-pubout", "-out", str(trust)], check=True, capture_output=True)
             fingerprint = hashlib.sha256(trust.read_bytes()).hexdigest()
             self.assertEqual(run_cli("init", "--project", str(project)).returncode, 0)
             manifest = project / "agent-harness.toml"
@@ -112,6 +114,14 @@ class HarnessTests(unittest.TestCase):
             inside = run_cli("plan", "--project", str(project))
             self.assertEqual(inside.returncode, 2)
             self.assertIn("outside", inside.stderr)
+            manifest.write_text(
+                manifest.read_text()
+                .replace(str(trust_inside), str(private))
+                .replace(hashlib.sha256(trust_inside.read_bytes()).hexdigest(), hashlib.sha256(private.read_bytes()).hexdigest())
+            )
+            private_result = run_cli("plan", "--project", str(project))
+            self.assertEqual(private_result.returncode, 2)
+            self.assertIn("public key", private_result.stderr)
 
     def test_init_creates_manifest_and_never_overwrites(self):
         with tempfile.TemporaryDirectory() as raw:
