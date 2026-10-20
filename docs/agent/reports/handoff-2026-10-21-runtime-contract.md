@@ -39,6 +39,7 @@ schema.
 - `6616950` — reconcile desired/applied/observed provider state.
 - `ef6f918` — structurally evaluate the producer consumer contract.
 - `b9243c3` — bind lease-end events and evidence under kernel contract v2.
+- `2620099` — freeze typed Python/Rust decision fixture conformance.
 
 ## Consumer Commit
 
@@ -51,9 +52,10 @@ that consumer contract.
 
 ## Verification
 
-- Harness Python: 31 tests passed.
+- Harness Python: 32 tests passed.
 - Harness Bats: 130 tests passed, including retry shape normalization.
-- Rust: 25 tests passed across CLI, decision, lifecycle, and reconciliation.
+- Rust: 26 tests passed across CLI, decision, lifecycle, fixture conformance,
+  and reconciliation.
 - Rust formatting and Clippy with warnings denied: passed.
 - Harness `nix flake check`: passed on `aarch64-darwin`.
 - `tonys-nix nix flake check --no-update-lock-file`: passed, including profile
@@ -74,7 +76,9 @@ They must remain grouped if the user later chooses to commit them.
 
 ## Remaining Full-Objective Work
 
-- Wire read-only Python/Rust differential shadow evaluation.
+- Wire runtime read-only Python/Rust comparison; typed shared-fixture
+  conformance is committed, but it does not yet invoke both implementations in
+  one observation path.
 - Implement an outbound canonical-resource boundary that rechecks filesystem
   paths/symlinks at use time.
 - Implement exact network DNS and redirect reauthorization in an enforcement
