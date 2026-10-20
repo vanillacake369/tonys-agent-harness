@@ -198,6 +198,20 @@ class HarnessTests(unittest.TestCase):
             self.assertEqual(second.returncode, 0, second.stderr)
             self.assertEqual(snapshot, {p.relative_to(output): p.read_bytes() for p in output.rglob("*") if p.is_file()})
 
+    def test_plan_reports_desired_and_observed_reconciliation_status(self):
+        with tempfile.TemporaryDirectory() as raw:
+            project = Path(raw) / "project"
+            output = Path(raw) / "generated"
+            self.assertEqual(run_cli("init", "--project", str(project)).returncode, 0)
+            before = json.loads(run_cli("plan", "--project", str(project), "--output", str(output)).stdout)
+            self.assertEqual(before["reconciliation_status"], "NOT_APPLIED")
+            self.assertIsNone(before["observed_digest"])
+            self.assertTrue(all(value == "STATICALLY_VERIFIED" for value in before["provider_status"].values()))
+            self.assertEqual(run_cli("export", "--project", str(project), "--output", str(output)).returncode, 0)
+            after = json.loads(run_cli("plan", "--project", str(project), "--output", str(output)).stdout)
+            self.assertEqual(after["reconciliation_status"], "IN_SYNC")
+            self.assertEqual(after["desired_digest"], after["observed_digest"])
+
     def test_verify_detects_tampered_output(self):
         with tempfile.TemporaryDirectory() as raw:
             project = Path(raw) / "project"

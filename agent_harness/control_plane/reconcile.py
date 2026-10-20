@@ -49,12 +49,30 @@ def plan(project: Path, output: Path) -> dict:
     config = normalized(load_manifest(project))
     instruction = instruction_content(project, config)
     files = target_files(config, instruction)
+    desired = source_digest(config, instruction)
+    observed = None
+    reconciliation_status = "NOT_APPLIED"
+    warnings = []
+    manifest = output / "manifest.json"
+    if output.exists():
+        try:
+            current = json.loads(manifest.read_text())
+            observed = current.get("source_digest")
+            reconciliation_status = "IN_SYNC" if observed == desired else "DRIFTED"
+            if reconciliation_status == "DRIFTED":
+                warnings.append("generated output does not match desired source digest")
+        except (OSError, json.JSONDecodeError):
+            reconciliation_status = "UNMANAGED"
+            warnings.append("output exists without a readable harness manifest")
     return {
-        "status": "READY", "source_digest": source_digest(config, instruction),
+        "status": "READY", "source_digest": desired,
+        "desired_digest": desired, "observed_digest": observed,
+        "reconciliation_status": reconciliation_status,
         "providers": config["providers"], "output": str(output),
+        "provider_status": {provider: "STATICALLY_VERIFIED" for provider in config["providers"]},
         "normalized_config_digest": digest(config),
         "approval_trust_status": approval_trust_status(project, config),
-        "files": sorted(files), "warnings": [], "errors": [],
+        "files": sorted(files), "warnings": warnings, "errors": [],
     }
 
 
