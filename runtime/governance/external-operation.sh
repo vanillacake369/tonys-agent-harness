@@ -15,7 +15,7 @@ if [[ "$COMMAND" == "plan" && $# -eq 2 ]]; then
   INPUT=$(cat)
   if ! jq -e '
     type == "object" and
-    all(.operation_id,.target_provider,.environment,.target_resource,.request_fingerprint,
+    all(.operation_id,.target_provider,.environment,.target_resource,.repository_root,.action,.request_fingerprint,
       .idempotency_key,.approval_digest,.credential_profile,.rollback,.observation_window,
       .dry_run_evidence; type == "string" and length > 0)
   ' <<<"$INPUT" >/dev/null 2>&1; then
@@ -51,6 +51,17 @@ if [[ "$COMMAND" == "transition" && ($# -eq 5 || $# -eq 6) ]]; then
     PLANNED:APPROVAL_REQUIRED|APPROVAL_REQUIRED:APPROVED|APPROVED:EXECUTING|EXECUTING:SUCCEEDED|EXECUTING:FAILED|EXECUTING:UNKNOWN|SUCCEEDED:VERIFIED|SUCCEEDED:ROLLED_BACK|UNKNOWN:VERIFIED|UNKNOWN:FAILED|FAILED:ROLLED_BACK|*:BLOCKED) ;;
     *) echo "external transition blocked: invalid transition $CURRENT -> $STATUS" >&2; exit 2;;
   esac
+  if [[ "$CURRENT:$STATUS" == APPROVAL_REQUIRED:APPROVED ]]; then
+    receipt=${AGENT_APPROVAL_RECEIPT:-}
+    [[ -n "$receipt" ]] || { echo "external transition blocked: signed approval receipt required" >&2; exit 2; }
+    repo=$(jq -r --arg op "$OP" '.operations[$op].repository_root' "$REGISTRY")
+    digest=$(jq -r --arg op "$OP" '.operations[$op].approval_digest' "$REGISTRY")
+    action=$(jq -r --arg op "$OP" '.operations[$op].action' "$REGISTRY")
+    environment=$(jq -r --arg op "$OP" '.operations[$op].environment' "$REGISTRY")
+    "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/approval-gate.sh" \
+      --repo "$repo" --receipt "$receipt" --digest "$digest" \
+      --action "$action" --environment "$environment" >/dev/null
+  fi
   if [[ "$CURRENT" == UNKNOWN && "$STATUS" == VERIFIED && -z "$EXTERNAL_ID" ]]; then
     echo "external transition blocked: provider lookup resource id required" >&2; exit 2
   fi

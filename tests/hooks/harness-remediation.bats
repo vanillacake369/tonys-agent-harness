@@ -122,7 +122,8 @@ JSON
   evidence="$BATS_TEST_TMPDIR/actual.json"
   run python3 "$GOV/record-verification.py" --repo "$repo" --output "$evidence" --baseline "$baseline" --requirement FR-013 -- bash -c 'printf "actual fixture result"'
   [ "$status" -eq 0 ]
-  run bash "$GOV/completion-gate.sh" --repo "$repo" --scope "$BATS_TEST_TMPDIR/scope" --evidence "$evidence"
+  printf '%s\n' '{"requirement_id":"FR-013","red":{"sequence":1,"command":"test","exit_code":1,"result":"red"},"green":{"sequence":2,"command":"test","exit_code":0,"result":"green"},"exemption":null}' > "$BATS_TEST_TMPDIR/tdd.json"
+  run env AGENT_TDD_EVIDENCE="$BATS_TEST_TMPDIR/tdd.json" bash "$GOV/completion-gate.sh" --repo "$repo" --scope "$BATS_TEST_TMPDIR/scope" --evidence "$evidence"
   [ "$status" -eq 0 ]
   run python3 "$GOV/record-verification.py" --repo "$repo" --output "$BATS_TEST_TMPDIR/mutated.json" --baseline "$baseline" --requirement FR-013 -- bash -c 'printf "changed" >> a.txt'
   [ "$status" -eq 2 ]
@@ -353,7 +354,8 @@ JSON
   receipt="$BATS_TEST_TMPDIR/test-review.json"
   jq -cn --arg digest "$digest" --arg commit "$commit" '{status:"approved",reviewer_role:"independent-reviewer",commit:$commit,test_changes_digest:$digest,findings:[],reviewed_at:"2026-10-18T00:00:00Z"}' > "$receipt"; chmod 600 "$receipt"
   sign_receipt "$receipt"
-  run env AGENT_TEST_REVIEW_RECEIPT="$receipt" bash "$GOV/completion-gate.sh" --repo "$repo" --scope "$BATS_TEST_TMPDIR/review-scope" --evidence "$evidence"
+  printf '%s\n' '{"requirement_id":"FR-013","red":{"sequence":1,"command":"test","exit_code":1,"result":"red"},"green":{"sequence":2,"command":"test","exit_code":0,"result":"green"},"exemption":null}' > "$BATS_TEST_TMPDIR/review-tdd.json"
+  run env AGENT_TDD_EVIDENCE="$BATS_TEST_TMPDIR/review-tdd.json" AGENT_TEST_REVIEW_RECEIPT="$receipt" bash "$GOV/completion-gate.sh" --repo "$repo" --scope "$BATS_TEST_TMPDIR/review-scope" --evidence "$evidence"
   [ "$status" -eq 2 ]
   [[ "$output" == *'test review gate: missing input'* ]]
 }
@@ -417,14 +419,18 @@ SH
 
 @test "external operation contract enforces approval state transitions and UNKNOWN reconciliation" {
   registry="$BATS_TEST_TMPDIR/phase-five.json"
-  contract='{"operation_id":"op-1","target_provider":"github","environment":"production","target_resource":"repo","request_fingerprint":"fp-1","idempotency_key":"idem-1","approval_digest":"approval-1","credential_profile":"release-limited","rollback":"revert release","observation_window":"15m","dry_run_evidence":"dry-run passed"}'
+  repo="$BATS_TEST_TMPDIR/approved-repo"; mkdir "$repo"; git -C "$repo" init -q
+  contract=$(jq -cn --arg repo "$repo" '{operation_id:"op-1",target_provider:"github",environment:"production",target_resource:"repo",repository_root:$repo,action:"release",request_fingerprint:"fp-1",idempotency_key:"idem-1",approval_digest:"approval-1",credential_profile:"release-limited",rollback:"revert release",observation_window:"15m",dry_run_evidence:"dry-run passed"}')
   run bash -c "printf '%s\\n' '$contract' | '$GOV/external-operation.sh' plan '$registry'"
   [ "$status" -eq 0 ]
   run "$GOV/external-operation.sh" transition "$registry" op-1 EXECUTING premature
   [ "$status" -eq 2 ]
   run "$GOV/external-operation.sh" transition "$registry" op-1 APPROVAL_REQUIRED requested
   [ "$status" -eq 0 ]
-  run "$GOV/external-operation.sh" transition "$registry" op-1 APPROVED receipt-verified
+  receipt="$BATS_TEST_TMPDIR/operation-approval.json"
+  jq -cn '{status:"approved",scope_digest:"approval-1",action:"release",environment:"production",approved_by:"fixture",expires_at:"2099-01-01T00:00:00Z"}' > "$receipt"
+  sign_receipt "$receipt"
+  run env AGENT_APPROVAL_RECEIPT="$receipt" "$GOV/external-operation.sh" transition "$registry" op-1 APPROVED receipt-verified
   [ "$status" -eq 0 ]
   run "$GOV/external-operation.sh" transition "$registry" op-1 EXECUTING request-sent
   [ "$status" -eq 0 ]

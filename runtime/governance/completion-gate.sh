@@ -29,6 +29,11 @@ if [[ "$MODE" == design ]]; then
   exit 0
 fi
 "$ROOT/evidence-gate.sh" "$EVIDENCE"
+TDD_EVIDENCE=${AGENT_TDD_EVIDENCE:-}
+[[ -n "$TDD_EVIDENCE" && -f "$TDD_EVIDENCE" ]] || {
+  echo "completion blocked: Red-before-Green TDD evidence required" >&2; exit 2;
+}
+"$ROOT/tdd-evidence-gate.sh" < "$TDD_EVIDENCE" >/dev/null
 "$ROOT/git-lifecycle-gate.sh" --repo "$REPO" --mode "$MODE" --scope "$SCOPE" --evidence "$EVIDENCE"
 if [[ "$MODE" == code ]] && ! jq -e '. as $e | .worktree_clean == true and
   all(.commands[]; .executed_commit == $e.commit)' "$EVIDENCE" >/dev/null; then

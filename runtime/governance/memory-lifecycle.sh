@@ -93,6 +93,8 @@ validate_content() {
 case "$COMMAND" in
   write)
     CONTENT=${6:-}
+    EXPIRES_AT=${7:-}
+    EXPECTED_REVISION=${8:-}
     validate_content "$CONTENT" "$KIND"
     if [[ -z "$CONTENT" ]] || ! printf '%s' "$CONTENT" | jq -e 'type == "object"' >/dev/null 2>&1; then
       echo "invalid memory content" >&2; exit 2
@@ -100,11 +102,45 @@ case "$COMMAND" in
     if printf '%s' "$CONTENT" | grep -qiE 'password|secret|token|private[_-]?key|credential|ssn'; then
       echo "sensitive memory content rejected" >&2; exit 2
     fi
+    revision=1
+    if [[ -f "$path" ]]; then
+      current_revision=$(jq -er '.revision // 1' "$path") || { echo "invalid existing memory" >&2; exit 2; }
+      if [[ -z "$EXPECTED_REVISION" || "$EXPECTED_REVISION" != "$current_revision" ]]; then
+        echo "memory conflict: expected revision required" >&2; exit 2
+      fi
+      revision=$((current_revision + 1))
+    elif [[ -n "$EXPECTED_REVISION" ]]; then
+      echo "memory conflict: expected revision supplied for missing entry" >&2; exit 2
+    fi
+    if [[ -n "$EXPIRES_AT" ]] && ! python3 - "$EXPIRES_AT" <<'PY'
+from datetime import datetime
+import sys
+datetime.fromisoformat(sys.argv[1].replace("Z", "+00:00"))
+PY
+    then
+      echo "invalid memory expiry" >&2; exit 2
+    fi
     mkdir -p "$(dirname "$path")"
     chmod 700 "$ROOT" "$ROOT/$NAMESPACE" "$ROOT/$NAMESPACE/$KIND" 2>/dev/null || true
-    atomic_json_write "$path" -cn --arg namespace "$NAMESPACE" --arg kind "$KIND" --arg id "$ID" --argjson content "$CONTENT" \
-      '{memory_version:1,namespace:$namespace,kind:$kind,id:$id,confidence:"unverified",content:$content}'
+    atomic_json_write "$path" -cn --arg namespace "$NAMESPACE" --arg kind "$KIND" --arg id "$ID" \
+      --arg expires_at "$EXPIRES_AT" --argjson revision "$revision" --argjson content "$CONTENT" \
+      '{memory_version:1,namespace:$namespace,kind:$kind,id:$id,revision:$revision,expires_at:(if $expires_at == "" then null else $expires_at end),confidence:"unverified",content:$content}'
     echo "memory written: $NAMESPACE/$KIND/$ID"
+    ;;
+  read)
+    [[ -f "$path" ]] || { echo "memory not found" >&2; exit 2; }
+    expires=$(jq -r '.expires_at // ""' "$path")
+    if [[ -n "$expires" ]] && ! python3 - "$expires" <<'PY'
+from datetime import datetime, timezone
+import sys
+expires = datetime.fromisoformat(sys.argv[1].replace("Z", "+00:00"))
+raise SystemExit(0 if expires > datetime.now(timezone.utc) else 2)
+PY
+    then
+      atomic_json_write "$path" '.confidence="expired"' "$path"
+      echo "memory expired" >&2; exit 2
+    fi
+    jq -c . "$path"
     ;;
   promote)
     [[ -f "$path" ]] || { echo "memory not found" >&2; exit 2; }
@@ -125,7 +161,7 @@ case "$COMMAND" in
     echo "memory deleted recoverably: $NAMESPACE/$KIND/$ID"
     ;;
   *)
-    echo "usage: $0 write|promote|stale|delete ROOT NAMESPACE KIND ID [CONTENT|TARGET_KIND]" >&2
+    echo "usage: $0 write|read|promote|stale|delete ROOT NAMESPACE KIND ID [CONTENT|TARGET_KIND] [EXPIRES_AT] [EXPECTED_REVISION]" >&2
     exit 2
     ;;
 esac
