@@ -158,6 +158,18 @@ JSON
   ! grep -q 'prompt' "$file"
 }
 
+@test "telemetry records versioned execution metrics and summary coverage without raw content" {
+  file="$BATS_TEST_TMPDIR/events.jsonl"
+  event='{"event_type":"completion","event_id":"evt-1","task_id":"task-1","route":"standard","duration_ms":120,"retry_count":1,"human_intervention":true,"review_findings":2,"requirements_total":3,"requirements_verified":2,"result":"blocked","prompt":"must-not-persist"}'
+  run bash -c "printf '%s\\n' '$event' | '$BATS_TEST_DIRNAME/../../runtime/orchestrator/telemetry.sh' '$file'"
+  [ "$status" -eq 0 ]
+  ! grep -q 'must-not-persist' "$file"
+  run "$SUMMARY" "$file"
+  [ "$status" -eq 0 ]
+  run jq -e '.events == 1 and .latency_ms.total == 120 and .retries == 1 and .human_interventions == 1 and .review_findings == 2 and .evidence_coverage == (2/3) and .policy_learning == false' <<<"$output"
+  [ "$status" -eq 0 ]
+}
+
 @test "risk-bearing changed files require a PRD" {
   run bash -c "printf '%s\\n' 'nix/agents/contract-roles.nix' | '$PRD_GATE' --files"
   [ "$status" -eq 2 ]
@@ -178,6 +190,18 @@ JSON
 JSON
   [ "$status" -eq 0 ]
   [[ "$output" == *'"status":"READY_TO_EXECUTE"'* ]]
+}
+
+@test "phase three plan is deterministic frozen DAG with exactly one writer" {
+  input='{"phase":"3","request_digest":"digest-1","decision":{"decision_id":"decision-1","selected_action":"AUTO_EXECUTE","human_approval_required":false}}'
+  run "$PLAN" <<<"$input"
+  [ "$status" -eq 0 ]
+  first="$output"
+  run "$PLAN" <<<"$input"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$first" ]
+  run jq -e '.frozen == true and (.plan_digest | length == 64) and ([.dag[] | select(.permission == "write")] | length == 1) and (.dag[-1].depends_on == ["implement"])' <<<"$output"
+  [ "$status" -eq 0 ]
 }
 
 @test "phase five remains blocked without approval even for auto execute" {
