@@ -1,5 +1,8 @@
 # Handoff: Retry Reliability and Runtime Contract Kernel
 
+> Historical snapshot. Superseded by
+> `docs/agent/reports/handoff-2026-10-21-runtime-contract.md`.
+
 ## Scope
 
 This handoff covers the Codex PostToolUse retry failure, the first public
