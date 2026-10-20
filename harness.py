@@ -63,13 +63,18 @@ preset = {json.dumps(preset)}\n\
 \n\
 [project]\n\
 instruction = "AGENTS.md"\n\
-spec_root = "docs/agent"\n\
+spec_root = ".codex"\n\
+\n\
+[project.guides]\n\
+enabled = false\n\
+source = ""\n\
+link = ".agent-context/team-guides"\n\
 \n\
 [providers]\n\
 {provider_lines}\n\
 \n\
 [workflow]\n\
-public_commands = ["work", "comment", "handoff", "ship"]\n\
+public_commands = ["cmd-mid-work-ljh", "cmd-mid-comment-ljh", "cmd-post-blog-ljh", "cmd-post-handoff-ljh", "cmd-post-ship-ljh", "cmd-post-commit-ljh"]\n\
 roles = [{roles}]\n\
 \n\
 [permissions]\n\
@@ -83,6 +88,8 @@ production = true\n\
 destructive = true\n\
 migration = true\n\
 external_mutation = true\n\
+public_key_path = ""\n\
+expected_fingerprint = ""\n\
 \n\
 [verification]\n\
 retry_max = 3\n\
@@ -102,7 +109,45 @@ def load_manifest(project: Path) -> dict:
     if data.get("preset") not in PRESETS:
         raise HarnessError("unknown preset")
     validate_policy(data)
+    validate_project_inputs(data, project.resolve())
     return data
+
+
+def _inside(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def validate_project_inputs(data: dict, project: Path) -> None:
+    project_config = data.get("project", {})
+    spec_root = Path(project_config.get("spec_root", ".codex"))
+    if spec_root.is_absolute() or ".." in spec_root.parts:
+        raise HarnessError("project.spec_root must stay inside the project")
+    guides = project_config.get("guides", {})
+    if guides.get("enabled", False):
+        source_value = guides.get("source", "")
+        link = Path(guides.get("link", ".agent-context/team-guides"))
+        if not source_value:
+            raise HarnessError("project.guides.source is required when enabled")
+        source = Path(source_value).expanduser()
+        if not source.is_absolute() or not source.is_dir():
+            raise HarnessError("project.guides.source must be an existing absolute directory")
+        if link.is_absolute() or ".." in link.parts:
+            raise HarnessError("project.guides.link must stay inside the project")
+    approval = data.get("approval", {})
+    trust_value = approval.get("public_key_path", "")
+    fingerprint = approval.get("expected_fingerprint", "")
+    if trust_value:
+        trust = Path(trust_value).expanduser()
+        if not trust.is_absolute():
+            raise HarnessError("approval.public_key_path must be absolute")
+        if _inside(trust, project):
+            raise HarnessError("approval public key must stay outside the project")
+        if fingerprint and (len(fingerprint) != 64 or any(char not in "0123456789abcdef" for char in fingerprint.lower())):
+            raise HarnessError("approval.expected_fingerprint must be a SHA-256 hex digest")
 
 
 def validate_policy(data: dict) -> None:
@@ -138,7 +183,15 @@ def normalized(data: dict) -> dict:
     return {
         "schema_version": 1,
         "preset": data["preset"],
-        "project": data.get("project", {"instruction": "AGENTS.md", "spec_root": "docs/agent"}),
+        "project": {
+            "instruction": data.get("project", {}).get("instruction", "AGENTS.md"),
+            "spec_root": data.get("project", {}).get("spec_root", ".codex"),
+            "guides": {
+                "enabled": data.get("project", {}).get("guides", {}).get("enabled", False),
+                "source": data.get("project", {}).get("guides", {}).get("source", ""),
+                "link": data.get("project", {}).get("guides", {}).get("link", ".agent-context/team-guides"),
+            },
+        },
         "providers": providers,
         "workflow": data.get("workflow", {}),
         "permissions": {
@@ -148,9 +201,28 @@ def normalized(data: dict) -> dict:
         "approval": {
             "production": True, "destructive": True,
             "migration": True, "external_mutation": True,
+            "public_key_path": data.get("approval", {}).get("public_key_path", ""),
+            "expected_fingerprint": data.get("approval", {}).get("expected_fingerprint", ""),
         },
         "verification": data.get("verification", {"retry_max": 3}),
     }
+
+
+def approval_trust_status(project: Path, config: dict) -> str:
+    approval = config["approval"]
+    value = approval.get("public_key_path", "")
+    if not value:
+        return "UNPROVISIONED"
+    path = Path(value).expanduser()
+    if not path.is_file():
+        return "UNPROVISIONED"
+    if _inside(path, project):
+        raise HarnessError("approval public key must stay outside the project")
+    actual = hashlib.sha256(path.read_bytes()).hexdigest()
+    expected = approval.get("expected_fingerprint", "")
+    if expected and actual != expected.lower():
+        raise HarnessError("approval public key fingerprint mismatch")
+    return "PROVISIONED"
 
 
 def digest(value: dict) -> str:
@@ -270,6 +342,8 @@ def plan(project: Path, output: Path) -> dict:
     return {
         "status": "READY", "source_digest": source_digest(config, instruction),
         "providers": config["providers"], "output": str(output),
+        "normalized_config_digest": digest(config),
+        "approval_trust_status": approval_trust_status(project, config),
         "files": sorted(files), "warnings": [], "errors": [],
     }
 
@@ -387,6 +461,29 @@ def command_doctor(_: argparse.Namespace) -> dict:
     return {"status": "PASS", "python": sys.version.split()[0], "providers": binaries, "assets": asset_inventory()}
 
 
+def command_normalize(args: argparse.Namespace) -> dict:
+    return normalized(load_manifest(args.project.resolve()))
+
+
+def command_reconcile_guides(args: argparse.Namespace) -> dict:
+    project = args.project.resolve()
+    config = normalized(load_manifest(project))
+    guides = config["project"]["guides"]
+    if not guides["enabled"]:
+        return {"status": "DISABLED", "changed": False}
+    source = Path(guides["source"]).expanduser().resolve()
+    link = project / guides["link"]
+    link.parent.mkdir(parents=True, exist_ok=True)
+    if link.is_symlink():
+        if link.resolve() == source:
+            return {"status": "READY", "changed": False, "link": str(link), "source": str(source)}
+        raise HarnessError(f"refusing to replace existing symlink: {link}")
+    if link.exists():
+        raise HarnessError(f"refusing to replace user-owned guide path: {link}")
+    link.symlink_to(source, target_is_directory=True)
+    return {"status": "READY", "changed": True, "link": str(link), "source": str(source)}
+
+
 def asset_inventory() -> dict:
     skills = sorted(p.parent.name for p in (ROOT / "assets/skills").glob("*/SKILL.md"))
     commands = sorted(p.stem for p in (ROOT / "assets/commands").glob("cmd-*.md"))
@@ -402,6 +499,12 @@ def parser() -> argparse.ArgumentParser:
     init.set_defaults(handler=command_init)
     doctor = sub.add_parser("doctor")
     doctor.set_defaults(handler=command_doctor)
+    normalize_command = sub.add_parser("normalize")
+    normalize_command.add_argument("--project", type=Path, default=Path.cwd())
+    normalize_command.set_defaults(handler=command_normalize)
+    guides_command = sub.add_parser("reconcile-guides")
+    guides_command.add_argument("--project", type=Path, default=Path.cwd())
+    guides_command.set_defaults(handler=command_reconcile_guides)
     for name in ("plan", "export", "verify"):
         command = sub.add_parser(name)
         command.add_argument("--project", type=Path, default=Path.cwd())

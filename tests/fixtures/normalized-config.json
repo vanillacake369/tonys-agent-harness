@@ -1,0 +1,53 @@
+{
+  "approval": {
+    "destructive": true,
+    "expected_fingerprint": "",
+    "external_mutation": true,
+    "migration": true,
+    "production": true,
+    "public_key_path": ""
+  },
+  "permissions": {
+    "researcher_write": false,
+    "reviewer_write": false,
+    "secret_access": "deny",
+    "single_writer": true
+  },
+  "preset": "infra-devops",
+  "project": {
+    "guides": {
+      "enabled": false,
+      "link": ".agent-context/team-guides",
+      "source": ""
+    },
+    "instruction": "AGENTS.md",
+    "spec_root": ".codex"
+  },
+  "providers": [
+    "codex",
+    "gemini",
+    "kiro"
+  ],
+  "schema_version": 1,
+  "verification": {
+    "require_clean_git_for_done": true,
+    "retry_max": 3
+  },
+  "workflow": {
+    "public_commands": [
+      "cmd-mid-work-ljh",
+      "cmd-mid-comment-ljh",
+      "cmd-post-blog-ljh",
+      "cmd-post-handoff-ljh",
+      "cmd-post-ship-ljh",
+      "cmd-post-commit-ljh"
+    ],
+    "roles": [
+      "requirement-designer",
+      "researcher",
+      "architect",
+      "implementer",
+      "reviewer"
+    ]
+  }
+}

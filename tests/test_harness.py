@@ -1,6 +1,8 @@
 import json
+import hashlib
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -20,6 +22,97 @@ def run_cli(*args, cwd=None):
 
 
 class HarnessTests(unittest.TestCase):
+    def test_python_normalization_matches_the_shared_contract_fixture(self):
+        with tempfile.TemporaryDirectory() as raw:
+            project = Path(raw)
+            shutil.copy(ROOT / "tests/fixtures/agent-harness.toml", project / "agent-harness.toml")
+            (project / "AGENTS.md").write_text("fixture\n")
+            result = run_cli("normalize", "--project", str(project))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            expected = json.loads((ROOT / "tests/fixtures/normalized-config.json").read_text())
+            self.assertEqual(json.loads(result.stdout), expected)
+    def test_normalized_config_is_the_complete_adapter_input(self):
+        with tempfile.TemporaryDirectory() as raw:
+            project = Path(raw) / "project"
+            guides = Path(raw) / "team-guidelines"
+            guides.mkdir()
+            self.assertEqual(run_cli("init", "--project", str(project), "--preset", "infra-devops").returncode, 0)
+            manifest = project / "agent-harness.toml"
+            manifest.write_text(
+                manifest.read_text()
+                .replace('enabled = false', 'enabled = true')
+                .replace('source = ""', f'source = {json.dumps(str(guides))}')
+            )
+            result = run_cli("normalize", "--project", str(project))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            config = json.loads(result.stdout)
+            self.assertEqual(config["project"]["spec_root"], ".codex")
+            self.assertEqual(config["project"]["guides"]["source"], str(guides))
+            self.assertEqual(config["workflow"]["public_commands"], [
+                "cmd-mid-work-ljh", "cmd-mid-comment-ljh", "cmd-post-blog-ljh",
+                "cmd-post-handoff-ljh", "cmd-post-ship-ljh", "cmd-post-commit-ljh",
+            ])
+            self.assertEqual(config["permissions"]["secret_access"], "deny")
+            self.assertIn("approval", config)
+            self.assertIn("verification", config)
+
+    def test_reconcile_guides_creates_only_the_configured_symlink(self):
+        with tempfile.TemporaryDirectory() as raw:
+            project = Path(raw) / "project"
+            guides = Path(raw) / "team-guidelines"
+            guides.mkdir()
+            (guides / "common.md").write_text("grows independently\n")
+            self.assertEqual(run_cli("init", "--project", str(project)).returncode, 0)
+            manifest = project / "agent-harness.toml"
+            manifest.write_text(
+                manifest.read_text()
+                .replace('enabled = false', 'enabled = true')
+                .replace('source = ""', f'source = {json.dumps(str(guides))}')
+            )
+            result = run_cli("reconcile-guides", "--project", str(project))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            link = project / ".agent-context/team-guides"
+            self.assertTrue(link.is_symlink())
+            self.assertEqual(link.resolve(), guides.resolve())
+            self.assertEqual((link / "common.md").read_text(), "grows independently\n")
+            link.unlink()
+            link.parent.mkdir(exist_ok=True)
+            link.write_text("user-owned\n")
+            refused = run_cli("reconcile-guides", "--project", str(project))
+            self.assertEqual(refused.returncode, 2)
+            self.assertEqual(link.read_text(), "user-owned\n")
+
+    def test_approval_trust_path_is_external_and_fingerprint_bound(self):
+        with tempfile.TemporaryDirectory() as raw:
+            project = Path(raw) / "project"
+            project.mkdir()
+            trust = Path(raw) / "approval-public.pem"
+            trust.write_text("fixture-public-key\n")
+            fingerprint = hashlib.sha256(trust.read_bytes()).hexdigest()
+            self.assertEqual(run_cli("init", "--project", str(project)).returncode, 0)
+            manifest = project / "agent-harness.toml"
+            manifest.write_text(
+                manifest.read_text()
+                .replace('public_key_path = ""', f'public_key_path = {json.dumps(str(trust))}')
+                .replace('expected_fingerprint = ""', f'expected_fingerprint = "{fingerprint}"')
+            )
+            planned = run_cli("plan", "--project", str(project))
+            self.assertEqual(planned.returncode, 0, planned.stderr)
+            self.assertEqual(json.loads(planned.stdout)["approval_trust_status"], "PROVISIONED")
+            manifest.write_text(manifest.read_text().replace(fingerprint, "0" * 64))
+            mismatch = run_cli("plan", "--project", str(project))
+            self.assertEqual(mismatch.returncode, 2)
+            trust_inside = project / "public.pem"
+            trust_inside.write_text("inside\n")
+            manifest.write_text(
+                manifest.read_text()
+                .replace(str(trust), str(trust_inside))
+                .replace("0" * 64, hashlib.sha256(trust_inside.read_bytes()).hexdigest())
+            )
+            inside = run_cli("plan", "--project", str(project))
+            self.assertEqual(inside.returncode, 2)
+            self.assertIn("outside", inside.stderr)
+
     def test_init_creates_manifest_and_never_overwrites(self):
         with tempfile.TemporaryDirectory() as raw:
             project = Path(raw)
