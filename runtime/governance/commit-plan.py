@@ -6,10 +6,16 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import sys
 
 
 def git(repo, *args):
     return subprocess.check_output(["git", "-C", str(repo), *args], text=True).strip()
+
+
+def block(message):
+    print(message, file=sys.stderr)
+    raise SystemExit(2)
 
 
 def main():
@@ -26,13 +32,17 @@ def main():
         for item in plan.get("commits", []):
             commit = item.get("result_commit", "")
             if not commit or not item.get("requirements"):
-                raise SystemExit("commit plan verification blocked: result commit and requirements required")
+                block("commit plan verification blocked: result commit and requirements required")
             actual = set(git(repo, "show", "--format=", "--name-only", commit).splitlines())
             if actual != set(item.get("files", [])):
-                raise SystemExit("commit plan verification blocked: committed files differ from plan")
+                block("commit plan verification blocked: committed files differ from plan")
+            for name in actual:
+                patch = subprocess.check_output(["git", "-C", str(repo), "show", "--format=", "--binary", commit, "--", name])
+                if hashlib.sha256(patch).hexdigest() != item.get("staged_diff_sha256", {}).get(name):
+                    block("commit plan verification blocked: committed patch differs from plan")
             bindings.append({"commit": git(repo, "rev-parse", f"{commit}^{{commit}}"), "requirements": item["requirements"], "files": sorted(actual)})
         if not bindings:
-            raise SystemExit("commit plan verification blocked: no commit bindings")
+            block("commit plan verification blocked: no commit bindings")
         print(json.dumps({"status": "VERIFIED", "bindings": bindings}, sort_keys=True))
         return 0
     if not args.scope or not args.requirement:

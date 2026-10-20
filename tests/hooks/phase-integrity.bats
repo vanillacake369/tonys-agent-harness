@@ -15,6 +15,8 @@ setup() {
   [ "$status" -eq 2 ]
   run "$GOV/tdd-evidence-gate.sh" --requirements-json '["OTHER"]' --baseline base --green-commit head <<<"$valid"
   [ "$status" -eq 2 ]
+  run "$GOV/tdd-evidence-gate.sh" --requirements-json '["PH-0302","OTHER"]' --baseline base --green-commit head <<<"$valid"
+  [ "$status" -eq 2 ]
 }
 
 @test "commit planner derives style and blocks staged files outside scope" {
@@ -39,6 +41,11 @@ setup() {
   [ "$status" -eq 0 ]
   run jq -e '.status == "VERIFIED" and .bindings[0].requirements == ["PH-0303"] and .bindings[0].files == ["a.py"]' <<<"$output"
   [ "$status" -eq 0 ]
+  printf 'replacement\n' > "$repo/a.py"; git -C "$repo" add a.py; git -C "$repo" commit --amend -qm 'feat(core): replace a'
+  replacement=$(git -C "$repo" rev-parse HEAD)
+  jq --arg commit "$replacement" '.commits[0].result_commit=$commit' <<<"$plan" > "$BATS_TEST_TMPDIR/plan.json"
+  run python3 "$GOV/commit-plan.py" --repo "$repo" --verify-plan "$BATS_TEST_TMPDIR/plan.json"
+  [ "$status" -eq 2 ]
 }
 
 @test "memory expiry and optimistic revision conflicts fail closed" {
