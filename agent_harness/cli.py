@@ -12,6 +12,9 @@ from agent_harness.control_plane.reconcile import export, plan, reconcile_guides
 from agent_harness.domain.config import DEFAULT_PROJECT_GUIDE, HarnessError, PRESETS, PROVIDERS, ROOT, normalized
 from agent_harness.ingress.manifest import load_manifest, manifest_path, render_manifest
 
+PUBLIC_CONTRACT_VERSION = 1
+PUBLIC_VALIDATION_COMMANDS = ["validate", "doctor", "plan", "export", "verify"]
+
 
 def command_init(args: argparse.Namespace) -> dict:
     if args.preset not in PRESETS:
@@ -39,7 +42,24 @@ def asset_inventory() -> dict:
 
 def command_doctor(_: argparse.Namespace) -> dict:
     binaries = {name: shutil.which({"codex": "codex", "claude": "claude", "gemini": "gemini", "kiro": "kiro-cli"}[name]) for name in PROVIDERS}
-    return {"status": "PASS", "python": sys.version.split()[0], "providers": binaries, "assets": asset_inventory()}
+    return {
+        "status": "PASS",
+        "contract_version": PUBLIC_CONTRACT_VERSION,
+        "python": sys.version.split()[0],
+        "providers": binaries,
+        "assets": asset_inventory(),
+    }
+
+
+def command_validate(args: argparse.Namespace) -> dict:
+    config = normalized(load_manifest(args.project.resolve()))
+    return {
+        "status": "PASS",
+        "contract_version": PUBLIC_CONTRACT_VERSION,
+        "schema_version": config["schema_version"],
+        "providers": config["providers"],
+        "commands": PUBLIC_VALIDATION_COMMANDS,
+    }
 
 
 def command_normalize(args: argparse.Namespace) -> dict:
@@ -62,6 +82,9 @@ def parser() -> argparse.ArgumentParser:
     init.set_defaults(handler=command_init)
     doctor = sub.add_parser("doctor")
     doctor.set_defaults(handler=command_doctor)
+    validate = sub.add_parser("validate")
+    validate.add_argument("--project", type=Path, default=Path.cwd())
+    validate.set_defaults(handler=command_validate)
     normalize_command = sub.add_parser("normalize")
     normalize_command.add_argument("--project", type=Path, default=Path.cwd())
     normalize_command.set_defaults(handler=command_normalize)

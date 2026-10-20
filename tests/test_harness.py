@@ -22,6 +22,27 @@ def run_cli(*args, cwd=None):
 
 
 class HarnessTests(unittest.TestCase):
+    def test_validate_exposes_the_versioned_public_project_contract(self):
+        with tempfile.TemporaryDirectory() as raw:
+            project = Path(raw)
+            self.assertEqual(run_cli("init", "--project", str(project)).returncode, 0)
+
+            result = run_cli("validate", "--project", str(project))
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["status"], "PASS")
+            self.assertEqual(payload["contract_version"], 1)
+            self.assertEqual(payload["schema_version"], 1)
+            self.assertEqual(payload["providers"], ["codex"])
+            self.assertEqual(payload["commands"], ["validate", "doctor", "plan", "export", "verify"])
+
+    def test_doctor_exposes_its_public_contract_version(self):
+        result = run_cli("doctor")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["contract_version"], 1)
+
     def test_cli_is_a_thin_entrypoint_over_explicit_architecture_boundaries(self):
         entrypoint = CLI.read_text()
         self.assertLess(len(entrypoint.splitlines()), 20)
@@ -231,6 +252,7 @@ class HarnessTests(unittest.TestCase):
             output = Path(raw) / "generated"
             self.assertEqual(run_cli("init", "--project", str(project)).returncode, 0)
             before = json.loads(run_cli("plan", "--project", str(project), "--output", str(output)).stdout)
+            self.assertEqual(before["contract_version"], 1)
             self.assertEqual(before["reconciliation_status"], "NOT_APPLIED")
             self.assertIsNone(before["observed_digest"])
             self.assertTrue(all(value == "STATICALLY_VERIFIED" for value in before["provider_status"].values()))
@@ -238,6 +260,20 @@ class HarnessTests(unittest.TestCase):
             after = json.loads(run_cli("plan", "--project", str(project), "--output", str(output)).stdout)
             self.assertEqual(after["reconciliation_status"], "IN_SYNC")
             self.assertEqual(after["desired_digest"], after["observed_digest"])
+
+    def test_export_and_verify_expose_the_versioned_public_contract(self):
+        with tempfile.TemporaryDirectory() as raw:
+            project = Path(raw) / "project"
+            output = Path(raw) / "generated"
+            self.assertEqual(run_cli("init", "--project", str(project)).returncode, 0)
+
+            exported = run_cli("export", "--project", str(project), "--output", str(output))
+            verified = run_cli("verify", "--project", str(project), "--output", str(output))
+
+            self.assertEqual(exported.returncode, 0, exported.stderr)
+            self.assertEqual(verified.returncode, 0, verified.stderr)
+            self.assertEqual(json.loads(exported.stdout)["contract_version"], 1)
+            self.assertEqual(json.loads(verified.stdout)["contract_version"], 1)
 
     def test_verify_detects_tampered_output(self):
         with tempfile.TemporaryDirectory() as raw:

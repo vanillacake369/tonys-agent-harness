@@ -65,7 +65,7 @@ def plan(project: Path, output: Path) -> dict:
             reconciliation_status = "UNMANAGED"
             warnings.append("output exists without a readable harness manifest")
     return {
-        "status": "READY", "source_digest": desired,
+        "status": "READY", "contract_version": 1, "source_digest": desired,
         "desired_digest": desired, "observed_digest": observed,
         "reconciliation_status": reconciliation_status,
         "providers": config["providers"], "output": str(output),
@@ -97,7 +97,7 @@ def export(project: Path, output: Path) -> dict:
             hashes[name] = hashlib.sha256(content).hexdigest()
             modes[name] = mode
         export_manifest = {
-            "schema_version": 1, "generated_by": "tonys-agent-harness",
+            "contract_version": 1, "schema_version": 1, "generated_by": "tonys-agent-harness",
             "source_digest": source_digest(config, instruction),
             "files": hashes, "modes": modes, "providers": config["providers"],
         }
@@ -160,7 +160,12 @@ def verify(project: Path, output: Path) -> dict:
         expected_mode = 0o755 if name.startswith("runtime/") and path.suffix in (".sh", ".py") else 0o644
         if path.stat().st_mode & 0o777 != expected_mode or exported.get("modes", {}).get(name) != expected_mode:
             raise HarnessError(f"generated file mode mismatch: {name}")
-    return {"status": "PASS", "source_digest": source_digest(config, instruction), "files": len(expected)}
+    return {
+        "status": "PASS",
+        "contract_version": 1,
+        "source_digest": source_digest(config, instruction),
+        "files": len(expected),
+    }
 
 
 def reconcile_guides(project: Path, workspace: Path | None = None) -> dict:

@@ -88,6 +88,21 @@ in {
       default = normalized;
       description = "Normalized manifest projected by the Home Manager adapter.";
     };
+    consumerContract = lib.mkOption {
+      type = lib.types.attrs;
+      readOnly = true;
+      default = {
+        contractVersion = 1;
+        enabled = cfg.enable;
+        enabledProviders =
+          if normalized == null
+          then []
+          else normalized.providers;
+        publicCommands = ["validate" "doctor" "plan" "export" "verify"];
+        inherit (cfg) outputDirectory;
+      };
+      description = "Versioned public compatibility contract for Home Manager consumers.";
+    };
   };
 
   config = lib.mkIf cfg.enable {

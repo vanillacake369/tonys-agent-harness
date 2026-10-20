@@ -123,6 +123,12 @@ in {
       && lib.hasInfix "projectSource" homeManagerModuleText
       && lib.hasInfix "--workspace" homeManagerModuleText
     ))
+    (assert' "GIVEN a consumer evaluates the module WHEN it needs compatibility data THEN a versioned public contract is exposed" (
+      lib.hasInfix "consumerContract" homeManagerModuleText
+      && lib.hasInfix "contractVersion" homeManagerModuleText
+      && lib.hasInfix "enabledProviders" homeManagerModuleText
+      && lib.hasInfix "publicCommands" homeManagerModuleText
+    ))
     (assert' "GIVEN provider hooks WHEN Home Manager activates THEN every shared runtime hook is installed" (
       lib.hasInfix ".config/agents" homeManagerModuleText
       && lib.hasInfix "runtimeFiles" homeManagerModuleText

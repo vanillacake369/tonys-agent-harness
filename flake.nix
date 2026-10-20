@@ -79,7 +79,9 @@
 
     lib = {
       schemaVersion = 1;
+      consumerContractVersion = 1;
       supportedProviders = ["codex" "claude" "gemini" "kiro"];
+      validationCommands = ["validate" "doctor" "plan" "export" "verify"];
       publicCommands = ["cmd-mid-work-ljh" "cmd-mid-comment-ljh" "cmd-post-blog-ljh" "cmd-post-handoff-ljh" "cmd-post-ship-ljh" "cmd-post-commit-ljh"];
     };
 
