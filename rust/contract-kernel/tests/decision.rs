@@ -42,7 +42,7 @@ fn request() -> DecisionRequest {
             expires_at: 200,
             end_condition: LeaseEndCondition::TaskEnd,
             state: GrantState::Active,
-            revocation_evidence: None,
+            termination_evidence: None,
             approval_identity: "human:owner".into(),
             evidence_ref: "evidence:approval-1".into(),
             policy_revision: "policy-v1".into(),
@@ -144,14 +144,24 @@ fn grant_lifecycle_records_revocation_and_expiry_evidence() {
     .expect("revoke active grant");
     assert_eq!(grant.state, GrantState::Revoked);
     assert_eq!(
-        grant.revocation_evidence.as_deref(),
+        grant.termination_evidence.as_deref(),
         Some("evidence:revoke-1")
     );
 
     let mut expired = request().grants.remove(0);
-    transition_grant(&mut expired, GrantEvent::ObserveTime { now: 200 })
-        .expect("expire elapsed grant");
+    transition_grant(
+        &mut expired,
+        GrantEvent::ObserveTime {
+            now: 200,
+            evidence_ref: "evidence:clock-1".into(),
+        },
+    )
+    .expect("expire elapsed grant");
     assert_eq!(expired.state, GrantState::Expired);
+    assert_eq!(
+        expired.termination_evidence.as_deref(),
+        Some("evidence:clock-1")
+    );
 }
 
 #[test]
@@ -174,8 +184,205 @@ fn terminal_grant_state_cannot_be_reactivated_or_rewritten() {
         .is_err()
     );
     assert_eq!(
-        grant.revocation_evidence.as_deref(),
+        grant.termination_evidence.as_deref(),
         Some("evidence:revoke-1")
+    );
+}
+
+#[test]
+fn task_and_session_end_only_terminate_matching_scopes() {
+    let mut task_grant = request().grants.remove(0);
+    transition_grant(
+        &mut task_grant,
+        GrantEvent::TaskEnd {
+            task_id: "task-1".into(),
+            evidence_ref: "evidence:task-end".into(),
+        },
+    )
+    .expect("terminate matching task grant");
+    assert_eq!(task_grant.state, GrantState::Expired);
+    assert_eq!(
+        task_grant.termination_evidence.as_deref(),
+        Some("evidence:task-end")
+    );
+
+    let mut session_grant = request().grants.remove(0);
+    session_grant.scope = GrantScope::Session;
+    session_grant.end_condition = LeaseEndCondition::SessionEnd;
+    transition_grant(
+        &mut session_grant,
+        GrantEvent::SessionEnd {
+            session_id: "session-1".into(),
+            evidence_ref: "evidence:session-end".into(),
+        },
+    )
+    .expect("terminate matching session grant");
+    assert_eq!(session_grant.state, GrantState::Expired);
+    assert_eq!(
+        session_grant.termination_evidence.as_deref(),
+        Some("evidence:session-end")
+    );
+
+    let mut mismatch = request().grants.remove(0);
+    assert!(
+        transition_grant(
+            &mut mismatch,
+            GrantEvent::TaskEnd {
+                task_id: "task-2".into(),
+                evidence_ref: "evidence:wrong-task".into(),
+            },
+        )
+        .is_err()
+    );
+    assert_eq!(mismatch.state, GrantState::Active);
+}
+
+#[test]
+fn rejected_termination_events_preserve_the_entire_grant() {
+    let base = request().grants.remove(0);
+    let mut session = base.clone();
+    session.scope = GrantScope::Session;
+    session.end_condition = LeaseEndCondition::SessionEnd;
+    let mut expiry_only = base.clone();
+    expiry_only.end_condition = LeaseEndCondition::Expiry;
+    let mut session_expiry_only = session.clone();
+    session_expiry_only.end_condition = LeaseEndCondition::Expiry;
+    let cases = vec![
+        (
+            base.clone(),
+            GrantEvent::Revoke {
+                evidence_ref: String::new(),
+            },
+        ),
+        (
+            base.clone(),
+            GrantEvent::ObserveTime {
+                now: base.expires_at,
+                evidence_ref: String::new(),
+            },
+        ),
+        (
+            base.clone(),
+            GrantEvent::TaskEnd {
+                task_id: "task-1".into(),
+                evidence_ref: String::new(),
+            },
+        ),
+        (
+            session.clone(),
+            GrantEvent::SessionEnd {
+                session_id: "session-1".into(),
+                evidence_ref: String::new(),
+            },
+        ),
+        (
+            base.clone(),
+            GrantEvent::TaskEnd {
+                task_id: "wrong-task".into(),
+                evidence_ref: "evidence:task-end".into(),
+            },
+        ),
+        (
+            session.clone(),
+            GrantEvent::SessionEnd {
+                session_id: "wrong-session".into(),
+                evidence_ref: "evidence:session-end".into(),
+            },
+        ),
+        (
+            expiry_only,
+            GrantEvent::TaskEnd {
+                task_id: "task-1".into(),
+                evidence_ref: "evidence:task-end".into(),
+            },
+        ),
+        (
+            session_expiry_only,
+            GrantEvent::SessionEnd {
+                session_id: "session-1".into(),
+                evidence_ref: "evidence:session-end".into(),
+            },
+        ),
+        (
+            base,
+            GrantEvent::SessionEnd {
+                session_id: "session-1".into(),
+                evidence_ref: "evidence:session-end".into(),
+            },
+        ),
+    ];
+    for (before, event) in cases {
+        let mut grant = before.clone();
+        assert!(transition_grant(&mut grant, event).is_err());
+        assert_eq!(grant, before);
+    }
+}
+
+#[test]
+fn time_observation_is_a_noop_before_expiry_and_a_hard_cap_after_it() {
+    let mut grant = request().grants.remove(0);
+    let before = grant.clone();
+    transition_grant(
+        &mut grant,
+        GrantEvent::ObserveTime {
+            now: 199,
+            evidence_ref: String::new(),
+        },
+    )
+    .expect("pre-expiry observation is a no-op");
+    assert_eq!(grant, before);
+
+    transition_grant(
+        &mut grant,
+        GrantEvent::ObserveTime {
+            now: 200,
+            evidence_ref: "evidence:clock-hard-cap".into(),
+        },
+    )
+    .expect("expiry is independent of the event end condition");
+    assert_eq!(grant.state, GrantState::Expired);
+
+    let mut session_grant = request().grants.remove(0);
+    session_grant.scope = GrantScope::Session;
+    session_grant.end_condition = LeaseEndCondition::SessionEnd;
+    transition_grant(
+        &mut session_grant,
+        GrantEvent::ObserveTime {
+            now: 200,
+            evidence_ref: "evidence:session-clock-hard-cap".into(),
+        },
+    )
+    .expect("expiry is also a hard cap for session grants");
+    assert_eq!(session_grant.state, GrantState::Expired);
+}
+
+#[test]
+fn v2_wire_schema_names_termination_evidence_and_event_evidence() {
+    let grant = request().grants.remove(0);
+    let serialized = serde_json::to_value(&grant).expect("serialize v2 grant");
+    assert!(serialized.get("termination_evidence").is_some());
+    assert!(serialized.get("revocation_evidence").is_none());
+    assert_eq!(
+        serde_json::from_value::<Grant>(serialized).expect("deserialize v2 grant"),
+        grant
+    );
+
+    let event = GrantEvent::ObserveTime {
+        now: 200,
+        evidence_ref: "evidence:clock".into(),
+    };
+    let serialized = serde_json::json!({
+        "event": "observe_time",
+        "now": 200,
+        "evidence_ref": "evidence:clock"
+    });
+    assert_eq!(
+        serde_json::to_value(&event).expect("serialize v2 event"),
+        serialized
+    );
+    assert_eq!(
+        serde_json::from_value::<GrantEvent>(serialized).expect("deserialize v2 event"),
+        event
     );
 }
 
@@ -236,7 +443,7 @@ fn invalid_resource_shapes_fail_closed() {
 #[test]
 fn unsupported_contract_version_denies() {
     let mut input = request();
-    input.contract_version = 2;
+    input.contract_version = 1;
     let result = decide(&input);
     assert_eq!(result.decision, DecisionKind::Deny);
     assert_eq!(result.reason_code, "unsupported_contract_version");

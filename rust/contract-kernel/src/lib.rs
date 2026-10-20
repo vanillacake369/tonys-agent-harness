@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::path::{Component, Path};
 
-pub const CONTRACT_VERSION: u32 = 1;
+pub const CONTRACT_VERSION: u32 = 2;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -47,8 +47,21 @@ pub enum GrantState {
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum GrantEvent {
-    Revoke { evidence_ref: String },
-    ObserveTime { now: u64 },
+    Revoke {
+        evidence_ref: String,
+    },
+    ObserveTime {
+        now: u64,
+        evidence_ref: String,
+    },
+    TaskEnd {
+        task_id: String,
+        evidence_ref: String,
+    },
+    SessionEnd {
+        session_id: String,
+        evidence_ref: String,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
@@ -72,7 +85,7 @@ pub struct Grant {
     pub expires_at: u64,
     pub end_condition: LeaseEndCondition,
     pub state: GrantState,
-    pub revocation_evidence: Option<String>,
+    pub termination_evidence: Option<String>,
     pub approval_identity: String,
     pub evidence_ref: String,
     pub policy_revision: String,
@@ -184,6 +197,18 @@ fn decision(
         decision: kind,
         reason_code: reason_code.into(),
         grant_id,
+    }
+}
+
+pub fn unsupported_contract_decision(policy_revision: &str) -> Decision {
+    Decision {
+        contract_version: CONTRACT_VERSION,
+        mode: "shadow".into(),
+        authoritative: false,
+        policy_revision: policy_revision.into(),
+        decision: DecisionKind::Deny,
+        reason_code: "unsupported_contract_version".into(),
+        grant_id: None,
     }
 }
 
@@ -322,8 +347,10 @@ fn valid_grant(grant: &Grant, policy_revision: &str) -> bool {
         && nonempty(&grant.evidence_ref)
         && grant.policy_revision == policy_revision
         && match grant.state {
-            GrantState::Active | GrantState::Expired => grant.revocation_evidence.is_none(),
-            GrantState::Revoked => grant.revocation_evidence.as_deref().is_some_and(nonempty),
+            GrantState::Active => grant.termination_evidence.is_none(),
+            GrantState::Revoked | GrantState::Expired => {
+                grant.termination_evidence.as_deref().is_some_and(nonempty)
+            }
         }
         && !grant.allowed_operations.is_empty()
         && grant
@@ -360,17 +387,51 @@ pub fn transition_grant(grant: &mut Grant, event: GrantEvent) -> Result<(), &'st
     match event {
         GrantEvent::Revoke { evidence_ref } => {
             if !nonempty(&evidence_ref) {
-                return Err("revocation_evidence_required");
+                return Err("termination_evidence_required");
             }
             grant.state = GrantState::Revoked;
-            grant.revocation_evidence = Some(evidence_ref);
+            grant.termination_evidence = Some(evidence_ref);
         }
-        GrantEvent::ObserveTime { now } => {
-            if now >= grant.expires_at {
-                grant.state = GrantState::Expired;
+        GrantEvent::ObserveTime { now, evidence_ref } => {
+            if now < grant.expires_at {
+                return Ok(());
             }
+            expire_grant(grant, evidence_ref)?;
+        }
+        GrantEvent::TaskEnd {
+            task_id,
+            evidence_ref,
+        } => {
+            if grant.scope != GrantScope::Task
+                || grant.end_condition != LeaseEndCondition::TaskEnd
+                || grant.task_id != task_id
+            {
+                return Err("task_end_does_not_match_grant");
+            }
+            expire_grant(grant, evidence_ref)?;
+        }
+        GrantEvent::SessionEnd {
+            session_id,
+            evidence_ref,
+        } => {
+            if grant.scope != GrantScope::Session
+                || grant.end_condition != LeaseEndCondition::SessionEnd
+                || grant.session_id.as_deref() != Some(session_id.as_str())
+            {
+                return Err("session_end_does_not_match_grant");
+            }
+            expire_grant(grant, evidence_ref)?;
         }
     }
+    Ok(())
+}
+
+fn expire_grant(grant: &mut Grant, evidence_ref: String) -> Result<(), &'static str> {
+    if !nonempty(&evidence_ref) {
+        return Err("termination_evidence_required");
+    }
+    grant.state = GrantState::Expired;
+    grant.termination_evidence = Some(evidence_ref);
     Ok(())
 }
 

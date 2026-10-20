@@ -28,7 +28,7 @@ fn malformed_json_exits_two_without_a_decision() {
 #[test]
 fn serialized_decision_is_explicitly_non_authoritative() {
     let request = serde_json::json!({
-        "contract_version": 1,
+        "contract_version": 2,
         "request_id": "request-1",
         "task_id": "task-1",
         "session_id": "session-1",
@@ -63,4 +63,20 @@ fn serialized_decision_is_explicitly_non_authoritative() {
     assert_eq!(response["mode"], "shadow");
     assert_eq!(response["authoritative"], false);
     assert_eq!(response["decision"], "ASK");
+}
+
+#[test]
+fn legacy_v1_wire_request_is_rejected_before_grant_schema_parsing() {
+    let request = serde_json::json!({
+        "contract_version": 1,
+        "policy_revision": "policy-v1",
+        "grants": [{"revocation_evidence": null}]
+    });
+    let output = run(&request.to_string());
+    assert!(output.status.success());
+    let response: serde_json::Value = serde_json::from_slice(&output.stdout).expect("JSON output");
+    assert_eq!(response["contract_version"], 2);
+    assert_eq!(response["decision"], "DENY");
+    assert_eq!(response["reason_code"], "unsupported_contract_version");
+    assert_eq!(response["policy_revision"], "policy-v1");
 }
