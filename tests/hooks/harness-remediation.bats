@@ -247,6 +247,18 @@ JSON
   [[ "$output" == *"task identity unavailable"* ]]
 }
 
+@test "retry hook resolves lifecycle identity from the provider payload cwd" {
+  repo="$BATS_TEST_TMPDIR/payload-cwd-repo"; mkdir "$repo"; git -C "$repo" init -q
+  state_dir="$BATS_TEST_TMPDIR/payload-cwd-tasks"
+  retry_state="$BATS_TEST_TMPDIR/payload-cwd-retries.json"
+  start=$(jq -cn --arg cwd "$repo" '{session_id:"payload-cwd",cwd:$cwd}')
+  env AGENT_TASK_STATE_DIR="$state_dir" python3 "$GOV/task-lifecycle.py" start <<<"$start"
+  payload=$(jq -cn --arg cwd "$repo" '{cwd:$cwd,tool_name:"Bash",tool_input:{command:"true"}}')
+  run env -u AGENT_TASK_ID AGENT_TASK_STATE_DIR="$state_dir" AGENT_RETRY_STATE="$retry_state" \
+    bash -c "cd / && bash '$GOV/retry-hook.sh' pre" <<<"$payload"
+  [ "$status" -eq 0 ]
+}
+
 @test "lifecycle task identity preserves retry budget across provider sessions" {
   repo="$BATS_TEST_TMPDIR/retry-repo"; mkdir "$repo"; git -C "$repo" init -q
   state_dir="$BATS_TEST_TMPDIR/tasks"; retry_state="$BATS_TEST_TMPDIR/retries.json"

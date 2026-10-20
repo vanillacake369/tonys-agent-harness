@@ -11,7 +11,9 @@ jq -e 'type == "object" and (.tool_name | type == "string" and length > 0)' <<<"
 }
 task=${AGENT_TASK_ID:-}
 if [[ -z "$task" ]]; then
-  repo=$(git -C "${PWD}" rev-parse --show-toplevel 2>/dev/null || printf '%s' "$PWD")
+  hook_cwd=$(jq -r '.cwd // empty' <<<"$INPUT")
+  [[ -n "$hook_cwd" ]] || hook_cwd=$PWD
+  repo=$(git -C "$hook_cwd" rev-parse --show-toplevel 2>/dev/null || printf '%s' "$hook_cwd")
   repo_key=$(printf '%s' "$repo" | shasum -a 256 | awk '{print $1}')
   task_state_dir=${AGENT_TASK_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/agent-policy/tasks}
   task_state="$task_state_dir/$repo_key.json"
