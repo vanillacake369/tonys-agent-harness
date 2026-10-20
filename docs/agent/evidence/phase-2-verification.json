@@ -2,11 +2,11 @@
   "schema_version": 1,
   "phase": 2,
   "repository": "tonys-agent-harness",
-  "tested_revision": "fd445a0de728454d0e7fd9fc2419bc07d6e1a7c3",
-  "requirements": ["FR-004", "FR-010", "PH-0201", "PH-0202", "PH-0203"],
+  "tested_revision": "73bd39d7aa6b5ff75f6db0ac42b40d74417eb164",
+  "requirements": ["FR-004", "PH-0201", "PH-0202", "PH-0203"],
   "decision": "VERIFIED_WITH_EXPLICIT_GAPS",
   "commands": [
-    {"command": "bats tests/hooks", "exit_code": 0, "duration_seconds": 13.31, "result": "114 tests passed"},
+    {"command": "bats tests/hooks", "exit_code": 0, "duration_seconds": 15.25, "result": "117 tests passed"},
     {"command": "provider-native-conformance.sh --repo TEMP_PROJECT --generated TEMP_GENERATED", "exit_code": 0, "duration_seconds": 2.37, "result": "receipt complete with explicit non-pass provider states"}
   ],
   "provider_status": [
@@ -16,6 +16,6 @@
     {"provider": "gemini", "version": "unknown", "status": "UNAVAILABLE", "evidence": "binary not installed"}
   ],
   "source_digest": "16459c1bb573f2e29040137ce86939afd9c50b83cf9b3ba2ec5c19d27d6724ef",
-  "generated_digest": "05ccc57a7f751b2328d6e8f82c2663bd99c34e4814c579797a32824025dfa280",
+  "generated_digest": "d719ef856a3979330da72732f6c229ca9afc30a55a02c85355a5f6dd3e253df6",
   "open_items": ["Codex native sandbox cannot start in the current nested execution context", "Claude and Gemini native binaries are unavailable"]
 }

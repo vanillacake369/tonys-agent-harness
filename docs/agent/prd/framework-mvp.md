@@ -36,7 +36,7 @@ and `verify`; Codex, Claude, Gemini, and Kiro are explicit exporter targets.
 
 ### FR-004 — Provider capability model
 
-- Status: implemented
+- Status: verified
 - Codex, Claude, Gemini, and Kiro expose explicit supported, adapted, or
   unsupported capabilities.
 - Unsupported mandatory enforcement fails verification instead of disappearing.
@@ -64,7 +64,7 @@ and `verify`; Codex, Claude, Gemini, and Kiro are explicit exporter targets.
 
 ### FR-008 — Nix consumption
 
-- Status: implemented
+- Status: verified
 - Expose a flake package/app, library metadata, and Home Manager module entry
   without embedding a machine username or home path.
 - The Home Manager adapter must consume the same normalized project manifest as
@@ -87,7 +87,7 @@ and `verify`; Codex, Claude, Gemini, and Kiro are explicit exporter targets.
 
 ### FR-011 — Phase-complete engineering harness
 
-- Status: implemented
+- Status: verified
 - Implement and independently verify the Phase 0–5 contracts in
   `phase-0-5.md`.
 - Local implementation completion and native or operational verification are
@@ -111,7 +111,7 @@ and `verify`; Codex, Claude, Gemini, and Kiro are explicit exporter targets.
       provider instruction gate detects drift.
 - [x] `nix flake check` and the repository test command pass at the Phase 0
       baseline.
-- [ ] Every Phase 0–5 exit gate has revision-bound aggregate evidence.
+- [x] Every Phase 0–5 exit gate has revision-bound aggregate evidence.
 
 ## Non-goals
 

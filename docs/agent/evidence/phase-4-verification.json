@@ -2,11 +2,11 @@
   "schema_version": 1,
   "phase": 4,
   "repository": "tonys-agent-harness",
-  "tested_revision": "fd445a0de728454d0e7fd9fc2419bc07d6e1a7c3",
+  "tested_revision": "73bd39d7aa6b5ff75f6db0ac42b40d74417eb164",
   "requirements": ["PH-0401", "PH-0402", "PH-0403"],
   "decision": "VERIFIED",
   "commands": [
-    {"command": "bats tests/hooks", "exit_code": 0, "duration_seconds": 13.31, "result": "114 tests passed, including telemetry, memory, and skill evaluation failure cases"}
+    {"command": "bats tests/hooks", "exit_code": 0, "duration_seconds": 15.25, "result": "117 tests passed, including telemetry, memory expiry/conflict, and skill evaluation failure cases"}
   ],
   "conditional_checks": [{"name": "external telemetry database", "status": "DEFERRED", "evidence": "out of scope; local JSONL only"}],
   "open_items": []

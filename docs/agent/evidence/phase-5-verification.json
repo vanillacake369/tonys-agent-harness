@@ -2,11 +2,11 @@
   "schema_version": 1,
   "phase": 5,
   "repository": "tonys-agent-harness",
-  "tested_revision": "fd445a0de728454d0e7fd9fc2419bc07d6e1a7c3",
+  "tested_revision": "73bd39d7aa6b5ff75f6db0ac42b40d74417eb164",
   "requirements": ["PH-0501", "PH-0502", "PH-0503"],
   "decision": "VERIFIED_SIMULATION_ONLY",
   "commands": [
-    {"command": "bats tests/hooks", "exit_code": 0, "duration_seconds": 13.31, "result": "114 tests passed, including approval blocking, state transitions, UNKNOWN lookup, and duplicate prevention"}
+    {"command": "bats tests/hooks", "exit_code": 0, "duration_seconds": 15.25, "result": "117 tests passed, including signed approval binding, state transitions, UNKNOWN lookup, and duplicate prevention"}
   ],
   "conditional_checks": [{"name": "real external operation", "status": "BLOCKED_BY_APPROVAL", "evidence": "no push, deploy, migration, money movement, or external mutation was authorized or executed"}],
   "open_items": []

@@ -2,26 +2,26 @@
   "schema_version": 1,
   "phase": 0,
   "repository": "tonys-agent-harness",
-  "tested_revision": "712dfa4",
+  "tested_revision": "73bd39d7aa6b5ff75f6db0ac42b40d74417eb164",
   "requirements": ["FR-006", "PH-0001", "PH-0002", "PH-0003"],
   "decision": "VERIFIED",
   "commands": [
     {
       "command": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v",
       "exit_code": 0,
-      "duration_seconds": 2.513,
-      "result": "21 tests passed"
+      "duration_seconds": 4.16,
+      "result": "27 tests passed"
     },
     {
       "command": "bats tests/hooks",
       "exit_code": 0,
-      "duration_seconds": 11.279,
-      "result": "109 tests passed"
+      "duration_seconds": 15.25,
+      "result": "117 tests passed"
     },
     {
       "command": "nix flake check --no-write-lock-file",
       "exit_code": 0,
-      "duration_seconds": 1.12,
+      "duration_seconds": 25.23,
       "result": "all compatible-system checks passed; Linux systems not executed on Darwin"
     },
     {
