@@ -10,7 +10,10 @@ repository URL and keeps the harness revision in `flake.lock` only.
 The Rust kernel remains an explicit non-authoritative shadow. It now models
 typed directory/network operations, task/session lease scope, expiry/revocation,
 `ALLOW|ASK|DENY`, and desired/applied/observed provider reconciliation. It is
-not connected to an authorization path.
+not connected to an authorization path. Kernel contract v2 binds revoke,
+wall-clock expiry, task-end, and session-end transitions to termination
+evidence and rejects v1 wire requests before parsing their obsolete grant
+schema.
 
 ## Decisions
 
@@ -35,6 +38,7 @@ not connected to an authorization path.
 - `d06a1d3` — document and report unsupported Codex dynamic grants.
 - `6616950` — reconcile desired/applied/observed provider state.
 - `ef6f918` — structurally evaluate the producer consumer contract.
+- `b9243c3` — bind lease-end events and evidence under kernel contract v2.
 
 ## Consumer Commit
 
@@ -49,7 +53,7 @@ that consumer contract.
 
 - Harness Python: 31 tests passed.
 - Harness Bats: 130 tests passed, including retry shape normalization.
-- Rust: 20 tests passed across CLI, decision, lifecycle, and reconciliation.
+- Rust: 25 tests passed across CLI, decision, lifecycle, and reconciliation.
 - Rust formatting and Clippy with warnings denied: passed.
 - Harness `nix flake check`: passed on `aarch64-darwin`.
 - `tonys-nix nix flake check --no-update-lock-file`: passed, including profile
@@ -71,7 +75,6 @@ They must remain grouped if the user later chooses to commit them.
 ## Remaining Full-Objective Work
 
 - Wire read-only Python/Rust differential shadow evaluation.
-- Add task-end and session-end events to lease lifecycle.
 - Implement an outbound canonical-resource boundary that rechecks filesystem
   paths/symlinks at use time.
 - Implement exact network DNS and redirect reauthorization in an enforcement
