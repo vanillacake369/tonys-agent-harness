@@ -403,3 +403,35 @@ SH
   ' "$report"
   [ "$status" -eq 0 ]
 }
+
+@test "skill evaluation requires privacy-safe before and after evidence and cannot relax policy" {
+  gate="$GOV/skill-evaluation-gate.sh"
+  valid='{"skill":"skl-mid-impl-ljh","evaluator_role":"independent-reviewer","before":{"fixture":"case-1","completion_rate":0.5,"human_interventions":2},"after":{"fixture":"case-1","completion_rate":0.8,"human_interventions":1},"privacy_safe":true,"policy_relaxation":false,"findings":[]}'
+  run "$gate" <<<"$valid"
+  [ "$status" -eq 0 ]
+  run "$gate" <<<"$(jq '.policy_relaxation=true' <<<"$valid")"
+  [ "$status" -eq 2 ]
+  run "$gate" <<<'{"skill":"skl-mid-impl-ljh","evaluator_role":"implementer","privacy_safe":true,"policy_relaxation":false}'
+  [ "$status" -eq 2 ]
+}
+
+@test "external operation contract enforces approval state transitions and UNKNOWN reconciliation" {
+  registry="$BATS_TEST_TMPDIR/phase-five.json"
+  contract='{"operation_id":"op-1","target_provider":"github","environment":"production","target_resource":"repo","request_fingerprint":"fp-1","idempotency_key":"idem-1","approval_digest":"approval-1","credential_profile":"release-limited","rollback":"revert release","observation_window":"15m","dry_run_evidence":"dry-run passed"}'
+  run bash -c "printf '%s\\n' '$contract' | '$GOV/external-operation.sh' plan '$registry'"
+  [ "$status" -eq 0 ]
+  run "$GOV/external-operation.sh" transition "$registry" op-1 EXECUTING premature
+  [ "$status" -eq 2 ]
+  run "$GOV/external-operation.sh" transition "$registry" op-1 APPROVAL_REQUIRED requested
+  [ "$status" -eq 0 ]
+  run "$GOV/external-operation.sh" transition "$registry" op-1 APPROVED receipt-verified
+  [ "$status" -eq 0 ]
+  run "$GOV/external-operation.sh" transition "$registry" op-1 EXECUTING request-sent
+  [ "$status" -eq 0 ]
+  run "$GOV/external-operation.sh" transition "$registry" op-1 UNKNOWN timeout
+  [ "$status" -eq 0 ]
+  run "$GOV/external-operation.sh" transition "$registry" op-1 VERIFIED provider-lookup-confirmed resource-123
+  [ "$status" -eq 0 ]
+  run jq -e '.operations["op-1"].execution_status == "VERIFIED" and .operations["op-1"].external_resource_id == "resource-123" and (.operations["op-1"].verification_evidence | length) == 6' "$registry"
+  [ "$status" -eq 0 ]
+}

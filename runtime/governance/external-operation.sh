@@ -11,6 +11,59 @@ if ! mkdir "$REGISTRY.lock" 2>/dev/null; then
   echo "operation registry locked; inspect existing owner before retry" >&2; exit 2
 fi
 trap 'rmdir "$REGISTRY.lock"' EXIT
+if [[ "$COMMAND" == "plan" && $# -eq 2 ]]; then
+  INPUT=$(cat)
+  if ! jq -e '
+    type == "object" and
+    all(.operation_id,.target_provider,.environment,.target_resource,.request_fingerprint,
+      .idempotency_key,.approval_digest,.credential_profile,.rollback,.observation_window,
+      .dry_run_evidence; type == "string" and length > 0)
+  ' <<<"$INPUT" >/dev/null 2>&1; then
+    echo "external operation blocked: complete scoped contract required" >&2; exit 2
+  fi
+  [[ -f "$REGISTRY" ]] || printf '%s\n' '{"operations":{}}' > "$REGISTRY"
+  OP=$(jq -r .operation_id <<<"$INPUT")
+  if jq -e --arg op "$OP" '.operations[$op] != null' "$REGISTRY" >/dev/null; then
+    echo "external operation blocked: operation already exists" >&2; exit 2
+  fi
+  if jq -e --arg fp "$(jq -r .request_fingerprint <<<"$INPUT")" \
+      'any(.operations[]; .request_fingerprint == $fp)' "$REGISTRY" >/dev/null; then
+    echo "external operation blocked: request fingerprint already exists" >&2; exit 2
+  fi
+  jq --arg op "$OP" --argjson contract "$INPUT" '
+    .operations[$op] = ($contract + {
+      execution_status:"PLANNED", external_resource_id:null,
+      verification_evidence:["contract-validated"]
+    })
+  ' "$REGISTRY" > "$REGISTRY.tmp"
+  mv "$REGISTRY.tmp" "$REGISTRY"
+  jq -c --arg op "$OP" '.operations[$op]' "$REGISTRY"
+  exit 0
+fi
+
+if [[ "$COMMAND" == "transition" && ($# -eq 5 || $# -eq 6) ]]; then
+  OP=$3; STATUS=$4; EVIDENCE=$5; EXTERNAL_ID=${6:-}
+  [[ -f "$REGISTRY" && -n "$EVIDENCE" ]] || { echo "external transition blocked: operation and evidence required" >&2; exit 2; }
+  CURRENT=$(jq -er --arg op "$OP" '.operations[$op].execution_status' "$REGISTRY") || {
+    echo "external transition blocked: unknown operation" >&2; exit 2;
+  }
+  case "$CURRENT:$STATUS" in
+    PLANNED:APPROVAL_REQUIRED|APPROVAL_REQUIRED:APPROVED|APPROVED:EXECUTING|EXECUTING:SUCCEEDED|EXECUTING:FAILED|EXECUTING:UNKNOWN|SUCCEEDED:VERIFIED|SUCCEEDED:ROLLED_BACK|UNKNOWN:VERIFIED|UNKNOWN:FAILED|FAILED:ROLLED_BACK|*:BLOCKED) ;;
+    *) echo "external transition blocked: invalid transition $CURRENT -> $STATUS" >&2; exit 2;;
+  esac
+  if [[ "$CURRENT" == UNKNOWN && "$STATUS" == VERIFIED && -z "$EXTERNAL_ID" ]]; then
+    echo "external transition blocked: provider lookup resource id required" >&2; exit 2
+  fi
+  jq --arg op "$OP" --arg status "$STATUS" --arg evidence "$EVIDENCE" --arg external "$EXTERNAL_ID" '
+    .operations[$op].execution_status=$status |
+    .operations[$op].verification_evidence += [$evidence] |
+    if $external != "" then .operations[$op].external_resource_id=$external else . end
+  ' "$REGISTRY" > "$REGISTRY.tmp"
+  mv "$REGISTRY.tmp" "$REGISTRY"
+  jq -c --arg op "$OP" '.operations[$op]' "$REGISTRY"
+  exit 0
+fi
+
 if [[ "$COMMAND" == "reserve" && $# -eq 6 ]]; then
   OP=$3; PROVIDER=$4; TARGET=$5; FINGERPRINT=$6
   mkdir -p "$(dirname "$REGISTRY")"
@@ -49,5 +102,5 @@ if [[ "$COMMAND" == "mark" && $# -eq 5 ]]; then
   exit 0
 fi
 
-echo "usage: $0 reserve REGISTRY OPERATION_ID PROVIDER TARGET FINGERPRINT | mark REGISTRY OPERATION_ID STATUS EVIDENCE" >&2
+echo "usage: $0 plan REGISTRY < contract.json | transition REGISTRY OPERATION_ID STATUS EVIDENCE [EXTERNAL_ID] | reserve REGISTRY OPERATION_ID PROVIDER TARGET FINGERPRINT | mark REGISTRY OPERATION_ID STATUS EVIDENCE" >&2
 exit 2
