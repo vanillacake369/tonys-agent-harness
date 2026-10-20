@@ -12,12 +12,18 @@ fi
 tool_name=$(jq -r '.tool_name // ""' <<<"$INPUT" 2>/dev/null || true)
 file_path=$(jq -r '.tool_input.file_path // .tool_input.path // .tool_input.notebook_path // ""' <<<"$INPUT" 2>/dev/null || true)
 command=$(jq -r '.tool_input.command // ""' <<<"$INPUT" 2>/dev/null || true)
-payload="$file_path $command"
-# Normalize quoting for this supplemental detector. The provider sandbox remains
-# the filesystem boundary; shell text matching is not a sandbox.
-payload=${payload//\"/ }
-payload=${payload//\'/ }
-if [[ "$payload" =~ (^|[[:space:]/])\.env([.[:space:]/]|$) || "$payload" =~ (^|[[:space:]/])(secrets|credentials|\.ssh|\.gnupg)([[:space:]/]|$) || "$payload" =~ (private[_-]?key|id_rsa|\.pem|\.key)([[:space:]/]|$) ]]; then
+# Provider file fields are paths and receive strict matching. Bash input is
+# free-form text, so only clear path-shaped references are matched there;
+# searching docs for words such as "secrets" is not itself secret access.
+normalized_file=${file_path//\"/ }
+normalized_file=${normalized_file//\'/ }
+normalized_command=${command//\"/ }
+normalized_command=${normalized_command//\'/ }
+if [[ "$normalized_file" =~ (^|[[:space:]/])\.env([.[:space:]/]|$) || "$normalized_file" =~ (^|[[:space:]/])(secrets|credentials|\.ssh|\.gnupg)([[:space:]/]|$) || "$normalized_file" =~ (private[_-]?key|id_rsa|\.pem|\.key)([[:space:]/]|$) ]] \
+  || [[ "$normalized_command" =~ (^|[[:space:]])([^[:space:]]*/)?\.env([./[:space:]]|$) ]] \
+  || [[ "$normalized_command" =~ (^|[[:space:]])([^[:space:]]*/)(secrets|credentials|\.ssh|\.gnupg)(/[^[:space:]]*|[[:space:]]|$) ]] \
+  || [[ "$normalized_command" =~ (^|[[:space:]])(secrets|credentials|\.ssh|\.gnupg)/[^[:space:]]+ ]] \
+  || [[ "$normalized_command" =~ (^|[[:space:]])[^[:space:]]*(private[_-]?key|id_rsa|\.pem|\.key)([[:space:]]|$) ]]; then
   echo "blocked: sensitive path or credential material is not accessible ($tool_name)" >&2
   exit 2
 fi

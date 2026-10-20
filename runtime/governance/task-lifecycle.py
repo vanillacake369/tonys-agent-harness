@@ -11,6 +11,56 @@ from pathlib import Path
 import subprocess
 import sys
 import secrets
+import time
+
+
+def process_is_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def acquire_lock(lock: Path, session: str) -> None:
+    for _ in range(2):
+        try:
+            lock.mkdir(mode=0o700)
+            (lock / "owner.json").write_text(json.dumps({
+                "pid": os.getpid(), "session": session, "created_at": int(time.time()),
+            }))
+            return
+        except FileExistsError:
+            owner_path = lock / "owner.json"
+            try:
+                owner = json.loads(owner_path.read_text())
+                pid = owner.get("pid")
+            except (OSError, json.JSONDecodeError, TypeError):
+                raise ValueError("lifecycle state is locked by an unknown owner")
+            if isinstance(pid, int) and process_is_alive(pid):
+                raise ValueError(f"lifecycle state is locked by live process {pid}")
+            try:
+                owner_path.unlink()
+                lock.rmdir()
+            except FileNotFoundError:
+                continue
+            except OSError as error:
+                raise ValueError(f"cannot recover stale lifecycle lock: {error}") from error
+    raise ValueError("lifecycle state lock could not be acquired")
+
+
+def release_lock(lock: Path) -> None:
+    owner_path = lock / "owner.json"
+    try:
+        owner = json.loads(owner_path.read_text())
+    except (OSError, json.JSONDecodeError, TypeError):
+        return
+    if owner.get("pid") != os.getpid():
+        return
+    owner_path.unlink()
+    lock.rmdir()
 
 
 def main():
@@ -36,7 +86,7 @@ def main():
     key = hashlib.sha256(str(repo).encode()).hexdigest()
     state_file = state_root / f"{key}.json"
     lock = state_root / f"{key}.lock"
-    lock.mkdir(mode=0o700)
+    acquire_lock(lock, session)
     try:
         def git(*args):
             return subprocess.check_output(["git", "-C", str(repo), *args])
@@ -113,7 +163,7 @@ def main():
             print("BLOCKED: completion evidence did not satisfy the completion gate")
         return 0
     finally:
-        lock.rmdir()
+        release_lock(lock)
 
 
 if __name__ == "__main__":

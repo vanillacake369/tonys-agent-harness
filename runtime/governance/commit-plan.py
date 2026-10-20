@@ -1,94 +1,124 @@
 #!/usr/bin/env python3
-"""Create a deterministic, non-mutating SRP commit plan from staged scope."""
+"""Create and verify explicit pre-stage SRP commit plans."""
+
+from __future__ import annotations
+
 import argparse
 import hashlib
 import json
-from pathlib import Path
-import re
 import subprocess
 import sys
+from pathlib import Path
 
 
-def git(repo, *args):
-    return subprocess.check_output(["git", "-C", str(repo), *args], text=True).strip()
+def git(repo: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-C", str(repo), *args], check=True, text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    ).stdout.strip()
 
 
-def block(message):
+def fail(message: str) -> None:
     print(message, file=sys.stderr)
     raise SystemExit(2)
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--repo", required=True, type=Path)
-    parser.add_argument("--scope", type=Path)
-    parser.add_argument("--requirement", action="append")
-    parser.add_argument("--verify-plan", type=Path)
-    args = parser.parse_args()
-    repo = args.repo.resolve()
-    if args.verify_plan:
-        plan = json.loads(args.verify_plan.read_text())
-        bindings = []
-        for item in plan.get("commits", []):
-            commit = item.get("result_commit", "")
-            if not commit or not item.get("requirements"):
-                block("commit plan verification blocked: result commit and requirements required")
-            actual = set(git(repo, "show", "--format=", "--name-only", commit).splitlines())
-            if actual != set(item.get("files", [])):
-                block("commit plan verification blocked: committed files differ from plan")
-            for name in actual:
-                patch = subprocess.check_output(["git", "-C", str(repo), "show", "--format=", "--binary", commit, "--", name])
-                if hashlib.sha256(patch).hexdigest() != item.get("staged_diff_sha256", {}).get(name):
-                    block("commit plan verification blocked: committed patch differs from plan")
-            bindings.append({"commit": git(repo, "rev-parse", f"{commit}^{{commit}}"), "requirements": item["requirements"], "files": sorted(actual)})
-        if not bindings:
-            block("commit plan verification blocked: no commit bindings")
-        print(json.dumps({"status": "VERIFIED", "bindings": bindings}, sort_keys=True))
-        return 0
-    if not args.scope or not args.requirement:
-        parser.error("--scope and --requirement are required when planning")
-    scope = {line for line in args.scope.read_text().splitlines() if line}
-    staged = set(git(repo, "diff", "--cached", "--name-only").splitlines())
-    outside = sorted(staged - scope)
-    missing = sorted(scope - staged)
-    history = git(repo, "log", "-20", "--format=%s").splitlines()
-    conventional = sum(bool(re.match(r"^(feat|fix|refactor|docs|test|chore)(\([^)]*\))?: ", item)) for item in history)
-    style = "conventional" if conventional * 2 >= max(1, len(history)) else "repository-native"
-    groups = []
-    remaining = set(staged & scope)
-    for name in sorted(staged & scope):
-        if name not in remaining or "test" in Path(name).parts or Path(name).name.startswith("test_"):
-            continue
-        coupled = sorted(candidate for candidate in remaining if candidate != name and
-                         ("test" in Path(candidate).parts or Path(candidate).name.startswith("test_")) and
-                         Path(name).stem in Path(candidate).stem)
-        files = [name, *coupled]
-        remaining.difference_update(files)
-        groups.append(files)
-    groups.extend([[name] for name in sorted(remaining)])
-    commits = []
-    for files in groups:
-        digests = {}
-        for name in files:
-            patch = subprocess.check_output(["git", "-C", str(repo), "diff", "--cached", "--", name])
-            digests[name] = hashlib.sha256(patch).hexdigest()
-        commits.append({"responsibility": Path(files[0]).stem, "files": files,
-                        "staged_diff_sha256": digests, "requirements": args.requirement,
-                        "result_commit": None})
-    plan = {
-        "status": "BLOCKED" if outside or missing or not staged else "READY",
+def changed_files(repo: Path) -> set[str]:
+    tracked = set(filter(None, git(repo, "diff", "--name-only", "HEAD").splitlines()))
+    untracked = set(filter(None, git(repo, "ls-files", "--others", "--exclude-standard").splitlines()))
+    return tracked | untracked
+
+
+def digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def create_plan(repo: Path, responsibilities: Path) -> dict:
+    raw = json.loads(responsibilities.read_text())
+    commits = raw.get("commits")
+    if not isinstance(commits, list) or not commits:
+        fail("responsibility plan requires a non-empty commits list")
+    actual = changed_files(repo)
+    assigned: dict[str, str] = {}
+    names: set[str] = set()
+    errors: list[str] = []
+    rendered = []
+    for item in commits:
+        name = item.get("responsibility", "")
+        files = item.get("files", [])
+        requirements = item.get("requirements", [])
+        verification = item.get("verification_command", "")
+        if not name or name in names:
+            errors.append(f"duplicate or empty responsibility: {name!r}")
+        names.add(name)
+        if not files or not requirements or not verification:
+            errors.append(f"{name}: files, requirements, and verification_command are required")
+        for file in files:
+            if file in assigned:
+                errors.append(f"overlap: {file} belongs to {assigned[file]} and {name}")
+            assigned[file] = name
+        rendered.append({
+            "responsibility": name,
+            "files": files,
+            "requirements": requirements,
+            "verification_command": verification,
+            "content_sha256": {
+                file: digest(repo / file) for file in files if (repo / file).is_file()
+            },
+        })
+    missing = sorted(actual - set(assigned))
+    extra = sorted(set(assigned) - actual)
+    if missing:
+        errors.append("unassigned changed files: " + ", ".join(missing))
+    if extra:
+        errors.append("planned files are not changed: " + ", ".join(extra))
+    if errors:
+        fail("; ".join(errors))
+    return {
+        "schema_version": 1,
+        "subject_style": "conventional",
         "baseline_commit": git(repo, "rev-parse", "HEAD"),
-        "subject_style": style,
-        "history_samples": history[:5],
-        "requirements": args.requirement,
-        "staged_files": sorted(staged),
-        "outside_scope": outside,
-        "missing_from_stage": missing,
-        "commits": commits,
+        "commits": rendered,
     }
-    print(json.dumps(plan, sort_keys=True))
-    return 0 if plan["status"] == "READY" else 2
+
+
+def verify_plan(repo: Path, plan_path: Path) -> dict:
+    plan = json.loads(plan_path.read_text())
+    previous = plan.get("baseline_commit")
+    bindings = []
+    for item in plan.get("commits", []):
+        commit = item.get("result_commit")
+        if not previous or not commit:
+            fail("baseline_commit and every result_commit are required")
+        if git(repo, "rev-parse", f"{commit}^") != git(repo, "rev-parse", previous):
+            fail(f"commit sequence mismatch at {commit}")
+        files = sorted(filter(None, git(repo, "diff-tree", "--no-commit-id", "--name-only", "-r", commit).splitlines()))
+        expected = sorted(item.get("files", []))
+        if files != expected:
+            fail(f"commit file binding mismatch at {commit}: expected {expected}, got {files}")
+        for file in expected:
+            content = subprocess.run(
+                ["git", "-C", str(repo), "show", f"{commit}:{file}"], check=True,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            ).stdout
+            actual = hashlib.sha256(content).hexdigest()
+            if actual != item.get("content_sha256", {}).get(file):
+                fail(f"committed content mismatch for {file} at {commit}")
+        bindings.append({"responsibility": item["responsibility"], "commit": commit, "files": files})
+        previous = commit
+    return {"status": "VERIFIED", "baseline_commit": plan["baseline_commit"], "bindings": bindings}
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--repo", type=Path, required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--responsibilities", type=Path)
+    mode.add_argument("--verify-plan", type=Path)
+    args = parser.parse_args()
+    result = create_plan(args.repo, args.responsibilities) if args.responsibilities else verify_plan(args.repo, args.verify_plan)
+    print(json.dumps(result, indent=2, sort_keys=True))
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

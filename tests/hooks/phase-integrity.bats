@@ -19,31 +19,43 @@ setup() {
   [ "$status" -eq 2 ]
 }
 
-@test "commit planner derives style and blocks staged files outside scope" {
+@test "commit planner requires an explicit non-overlapping pre-stage responsibility plan" {
   repo="$BATS_TEST_TMPDIR/repo"; mkdir "$repo"
   git -C "$repo" init -q; git -C "$repo" config user.email test@example.invalid; git -C "$repo" config user.name test
   printf 'base\n' > "$repo/base"; git -C "$repo" add base; git -C "$repo" commit -qm 'feat(core): establish base'
-  printf 'a\n' > "$repo/a.py"; printf 'b\n' > "$repo/b.py"; git -C "$repo" add a.py b.py
-  printf 'a.py\n' > "$BATS_TEST_TMPDIR/scope"
-  run python3 "$GOV/commit-plan.py" --repo "$repo" --scope "$BATS_TEST_TMPDIR/scope" --requirement PH-0303
+  printf 'a\n' > "$repo/a.py"; printf 'b\n' > "$repo/b.py"
+  cat > "$BATS_TEST_TMPDIR/responsibilities.json" <<'JSON'
+{"commits":[
+  {"responsibility":"runtime","files":["a.py"],"requirements":["PH-0303"],"verification_command":"python -m unittest runtime"},
+  {"responsibility":"tests","files":["a.py"],"requirements":["PH-0303"],"verification_command":"python -m unittest tests"}
+]}
+JSON
+  run python3 "$GOV/commit-plan.py" --repo "$repo" --responsibilities "$BATS_TEST_TMPDIR/responsibilities.json"
   [ "$status" -eq 2 ]
-  [[ "$output" == *'b.py'* ]]
-  git -C "$repo" restore --staged b.py
-  run python3 "$GOV/commit-plan.py" --repo "$repo" --scope "$BATS_TEST_TMPDIR/scope" --requirement PH-0303
+  [[ "$output" == *'overlap'* && "$output" == *'b.py'* ]]
+  cat > "$BATS_TEST_TMPDIR/responsibilities.json" <<'JSON'
+{"commits":[
+  {"responsibility":"runtime","files":["a.py"],"requirements":["PH-0303"],"verification_command":"python -m unittest runtime"},
+  {"responsibility":"tests","files":["b.py"],"requirements":["PH-0303"],"verification_command":"python -m unittest tests"}
+]}
+JSON
+  run python3 "$GOV/commit-plan.py" --repo "$repo" --responsibilities "$BATS_TEST_TMPDIR/responsibilities.json"
   [ "$status" -eq 0 ]
   plan="$output"
-  run jq -e '.subject_style == "conventional" and .baseline_commit != "" and .requirements == ["PH-0303"] and (.commits | length == 1) and .commits[0].files == ["a.py"] and (.commits[0].staged_diff_sha256["a.py"] | length == 64)' <<<"$plan"
+  run jq -e '.subject_style == "conventional" and .baseline_commit != "" and (.commits | length == 2) and .commits[0].files == ["a.py"] and (.commits[0].content_sha256["a.py"] | length == 64)' <<<"$plan"
   [ "$status" -eq 0 ]
-  git -C "$repo" commit -qm 'feat(core): add a'
-  commit=$(git -C "$repo" rev-parse HEAD)
-  jq --arg commit "$commit" '.commits[0].result_commit=$commit' <<<"$plan" > "$BATS_TEST_TMPDIR/plan.json"
+  git -C "$repo" add a.py; git -C "$repo" commit -qm 'feat(runtime): add a'
+  first=$(git -C "$repo" rev-parse HEAD)
+  git -C "$repo" add b.py; git -C "$repo" commit -qm 'test(runtime): add b'
+  second=$(git -C "$repo" rev-parse HEAD)
+  jq --arg first "$first" --arg second "$second" '.commits[0].result_commit=$first | .commits[1].result_commit=$second' <<<"$plan" > "$BATS_TEST_TMPDIR/plan.json"
   run python3 "$GOV/commit-plan.py" --repo "$repo" --verify-plan "$BATS_TEST_TMPDIR/plan.json"
   [ "$status" -eq 0 ]
-  run jq -e '.status == "VERIFIED" and .bindings[0].requirements == ["PH-0303"] and .bindings[0].files == ["a.py"]' <<<"$output"
+  run jq -e '.status == "VERIFIED" and (.bindings | length == 2) and .bindings[0].files == ["a.py"] and .bindings[1].files == ["b.py"]' <<<"$output"
   [ "$status" -eq 0 ]
   printf 'replacement\n' > "$repo/a.py"; git -C "$repo" add a.py; git -C "$repo" commit --amend -qm 'feat(core): replace a'
   replacement=$(git -C "$repo" rev-parse HEAD)
-  jq --arg commit "$replacement" '.commits[0].result_commit=$commit' <<<"$plan" > "$BATS_TEST_TMPDIR/plan.json"
+  jq --arg replacement "$replacement" --arg second "$second" '.commits[0].result_commit=$replacement | .commits[1].result_commit=$second' <<<"$plan" > "$BATS_TEST_TMPDIR/plan.json"
   run python3 "$GOV/commit-plan.py" --repo "$repo" --verify-plan "$BATS_TEST_TMPDIR/plan.json"
   [ "$status" -eq 2 ]
 }

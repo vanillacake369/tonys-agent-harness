@@ -25,6 +25,20 @@ setup() {
   [ "$status" -eq 0 ]
 }
 
+@test "path guard permits sensitive vocabulary used as search text" {
+  run bash -c "printf '%s' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"rg -n credentials docs\"}}' | '$PATH_GUARD'"
+  [ "$status" -eq 0 ]
+  run bash -c "printf '%s' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"grep -R secrets README.md\"}}' | '$PATH_GUARD'"
+  [ "$status" -eq 0 ]
+}
+
+@test "path guard still blocks explicit sensitive paths in shell commands" {
+  run bash -c "printf '%s' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sed -n 1p ./secrets/runtime.yaml\"}}' | '$PATH_GUARD'"
+  [ "$status" -eq 2 ]
+  run bash -c "printf '%s' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"readlink /Users/test/.ssh/config\"}}' | '$PATH_GUARD'"
+  [ "$status" -eq 2 ]
+}
+
 @test "MCP allowlist rejects an undeclared role and server" {
   policy="$BATS_TEST_TMPDIR/mcp-policy.json"
   cat > "$policy" <<'JSON'

@@ -298,6 +298,31 @@ JSON
   [ "$status" -eq 0 ]
 }
 
+@test "lifecycle recovers a lock owned by a dead process" {
+  repo="$BATS_TEST_TMPDIR/stale-lock-repo"; mkdir "$repo"; git -C "$repo" init -q
+  state_dir="$BATS_TEST_TMPDIR/stale-lock-state"; mkdir -p "$state_dir"
+  key=$(printf '%s' "$(cd "$repo" && pwd -P)" | shasum -a 256 | awk '{print $1}')
+  mkdir "$state_dir/$key.lock"
+  printf '{\"pid\":99999999,\"session\":\"dead\",\"created_at\":1}\n' > "$state_dir/$key.lock/owner.json"
+  payload=$(jq -cn --arg cwd "$repo" '{session_id:"replacement",cwd:$cwd}')
+  run env AGENT_TASK_STATE_DIR="$state_dir" python3 "$GOV/task-lifecycle.py" start <<<"$payload"
+  [ "$status" -eq 0 ]
+  [ ! -e "$state_dir/$key.lock" ]
+}
+
+@test "lifecycle does not displace a lock owned by a live process" {
+  repo="$BATS_TEST_TMPDIR/live-lock-repo"; mkdir "$repo"; git -C "$repo" init -q
+  state_dir="$BATS_TEST_TMPDIR/live-lock-state"; mkdir -p "$state_dir"
+  key=$(printf '%s' "$(cd "$repo" && pwd -P)" | shasum -a 256 | awk '{print $1}')
+  mkdir "$state_dir/$key.lock"
+  printf '{\"pid\":%s,\"session\":\"live\",\"created_at\":1}\n' "$$" > "$state_dir/$key.lock/owner.json"
+  payload=$(jq -cn --arg cwd "$repo" '{session_id:"other",cwd:$cwd}')
+  run env AGENT_TASK_STATE_DIR="$state_dir" python3 "$GOV/task-lifecycle.py" start <<<"$payload"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"lifecycle state is locked"* ]]
+  [ -f "$state_dir/$key.lock/owner.json" ]
+}
+
 @test "non-code stop cannot rotate a blocked retry identity" {
   repo="$BATS_TEST_TMPDIR/blocked-repo"; mkdir "$repo"; git -C "$repo" init -q
   state_dir="$BATS_TEST_TMPDIR/blocked-tasks"; retry_state="$BATS_TEST_TMPDIR/blocked-retries.json"

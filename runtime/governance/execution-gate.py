@@ -6,13 +6,14 @@ import json
 import os
 from pathlib import Path
 import pwd
+import re
 import shlex
 import subprocess
 import sys
 
 
 MUTATING_SUBCOMMANDS = {
-    "git": {"commit", "push"},
+    "git": {"push"},
     "kubectl": {"apply", "create", "delete", "edit", "patch", "replace", "rollout", "scale", "set"},
     "terraform": {"apply", "destroy", "import"},
     "tofu": {"apply", "destroy", "import"},
@@ -27,10 +28,15 @@ MIGRATION_WORDS = {"migrate", "migration", "db:migrate", "prisma"}
 
 
 def classify(command: str) -> str | None:
-    if "$(" in command or "`" in command or "${!" in command:
+    if "${!" in command:
         return "unparseable-shell-command"
+    # Preserve visibility of commands nested in ordinary substitutions while
+    # avoiding a blanket denial of benign shell syntax such as $(pwd). This is
+    # a classifier, not a shell evaluator; provider sandboxing remains the
+    # execution boundary.
+    lexical_command = re.sub(r"\$\(|[()`]", " ", command)
     try:
-        lexer = shlex.shlex(command.replace("\n", ";"), posix=True, punctuation_chars=";&|")
+        lexer = shlex.shlex(lexical_command.replace("\n", ";"), posix=True, punctuation_chars=";&|")
         lexer.whitespace_split = True
         tokens = list(lexer)
     except ValueError:
