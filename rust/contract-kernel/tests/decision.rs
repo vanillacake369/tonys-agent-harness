@@ -1,0 +1,159 @@
+use harness_contract_kernel::{
+    CONTRACT_VERSION, DecisionKind, DecisionRequest, EnforcementObservation, EnforcementStatus,
+    Grant, Resource, ResourceType, decide,
+};
+
+fn request() -> DecisionRequest {
+    DecisionRequest {
+        contract_version: CONTRACT_VERSION,
+        request_id: "request-1".into(),
+        task_id: "task-1".into(),
+        session_id: Some("session-1".into()),
+        role: "implementer".into(),
+        agent: "codex".into(),
+        provider: "codex".into(),
+        policy_revision: "policy-v1".into(),
+        now: 100,
+        resource: Resource {
+            resource_type: ResourceType::Directory,
+            canonical_target: "/workspace/project".into(),
+            operation: "write".into(),
+        },
+        secret_access: false,
+        external_mutation: false,
+        provider_can_pause: true,
+        enforcement: EnforcementObservation {
+            status: EnforcementStatus::Observed,
+            provider: "codex".into(),
+            provider_version: "0.162.1".into(),
+            evidence_ref: "evidence:probe-1".into(),
+        },
+        grants: vec![Grant {
+            grant_id: "grant-1".into(),
+            task_id: "task-1".into(),
+            session_id: Some("session-1".into()),
+            role: "implementer".into(),
+            agent: "codex".into(),
+            resource_type: ResourceType::Directory,
+            canonical_target: "/workspace/project".into(),
+            allowed_operations: vec!["read".into(), "write".into()],
+            scope: "task".into(),
+            expires_at: 200,
+            end_condition: "task_end".into(),
+            revoked: false,
+            approval_identity: "human:owner".into(),
+            evidence_ref: "evidence:approval-1".into(),
+            policy_revision: "policy-v1".into(),
+        }],
+    }
+}
+
+#[test]
+fn matching_active_observed_grant_allows() {
+    let result = decide(&request());
+    assert_eq!(result.decision, DecisionKind::Allow);
+    assert_eq!(result.reason_code, "active_grant_observed");
+    assert_eq!(result.grant_id.as_deref(), Some("grant-1"));
+    assert_eq!(result.mode, "shadow");
+    assert!(!result.authoritative);
+}
+
+#[test]
+fn directory_grant_contains_descendants_but_not_string_prefix_collisions() {
+    let mut descendant = request();
+    descendant.resource.canonical_target = "/workspace/project/src/main.rs".into();
+    assert_eq!(decide(&descendant).decision, DecisionKind::Allow);
+
+    let mut collision = request();
+    collision.resource.canonical_target = "/workspace/project-escape/file".into();
+    assert_eq!(decide(&collision).decision, DecisionKind::Ask);
+}
+
+#[test]
+fn network_grant_matches_only_the_exact_canonical_target() {
+    let mut input = request();
+    input.resource.resource_type = ResourceType::Network;
+    input.resource.canonical_target = "https://api.example.test:443".into();
+    input.grants[0].resource_type = ResourceType::Network;
+    input.grants[0].canonical_target = "https://api.example.test:443".into();
+    assert_eq!(decide(&input).decision, DecisionKind::Allow);
+
+    input.resource.canonical_target = "https://redirect.example.test:443".into();
+    assert_eq!(decide(&input).decision, DecisionKind::Ask);
+}
+
+#[test]
+fn invariant_denials_dominate_a_matching_grant() {
+    for mutate in ["secret", "external"] {
+        let mut input = request();
+        if mutate == "secret" {
+            input.secret_access = true;
+        } else {
+            input.external_mutation = true;
+        }
+        assert_eq!(decide(&input).decision, DecisionKind::Deny);
+    }
+}
+
+#[test]
+fn expired_revoked_or_identity_mismatched_grants_do_not_allow() {
+    let mut cases = Vec::new();
+    let mut expired = request();
+    expired.grants[0].expires_at = expired.now;
+    cases.push(expired);
+    let mut revoked = request();
+    revoked.grants[0].revoked = true;
+    cases.push(revoked);
+    let mut other_task = request();
+    other_task.grants[0].task_id = "task-2".into();
+    cases.push(other_task);
+    let mut other_session = request();
+    other_session.grants[0].session_id = Some("session-2".into());
+    cases.push(other_session);
+
+    for input in cases {
+        assert_eq!(decide(&input).decision, DecisionKind::Ask);
+    }
+}
+
+#[test]
+fn unobserved_enforcement_never_allows() {
+    let mut input = request();
+    input.enforcement.status = EnforcementStatus::Unobserved;
+    assert_eq!(decide(&input).decision, DecisionKind::Ask);
+    input.provider_can_pause = false;
+    assert_eq!(decide(&input).decision, DecisionKind::Deny);
+}
+
+#[test]
+fn empty_grant_evidence_and_unknown_provider_fail_closed() {
+    let mut empty_evidence = request();
+    empty_evidence.grants[0].evidence_ref.clear();
+    assert_eq!(decide(&empty_evidence).decision, DecisionKind::Ask);
+
+    let mut unknown_provider = request();
+    unknown_provider.provider = "unknown".into();
+    unknown_provider.enforcement.provider = "unknown".into();
+    assert_eq!(decide(&unknown_provider).decision, DecisionKind::Deny);
+}
+
+#[test]
+fn invalid_resource_shapes_fail_closed() {
+    let mut relative = request();
+    relative.resource.canonical_target = "relative/path".into();
+    assert_eq!(decide(&relative).decision, DecisionKind::Deny);
+
+    let mut network = request();
+    network.resource.resource_type = ResourceType::Network;
+    network.resource.canonical_target = "https://api.example.test".into();
+    assert_eq!(decide(&network).decision, DecisionKind::Deny);
+}
+
+#[test]
+fn unsupported_contract_version_denies() {
+    let mut input = request();
+    input.contract_version = 2;
+    let result = decide(&input);
+    assert_eq!(result.decision, DecisionKind::Deny);
+    assert_eq!(result.reason_code, "unsupported_contract_version");
+}

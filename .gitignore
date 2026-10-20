@@ -11,4 +11,5 @@ credentials/
 *.key
 result
 result-*
+target/
 .DS_Store

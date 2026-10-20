@@ -15,6 +15,14 @@
   in {
     packages = forAllSystems (system: let
       pkgs = nixpkgs.legacyPackages.${system};
+      contractKernel = pkgs.rustPlatform.buildRustPackage {
+        pname = "harness-contract-kernel";
+        version = "0.1.0";
+        src = self;
+        cargoLock.lockFile = ./Cargo.lock;
+        cargoBuildFlags = ["-p" "harness-contract-kernel"];
+        cargoTestFlags = ["-p" "harness-contract-kernel"];
+      };
     in {
       default = pkgs.writeShellApplication {
         name = "harness";
@@ -27,6 +35,7 @@
           mainProgram = "harness";
         };
       };
+      contract-kernel = contractKernel;
     });
 
     apps = forAllSystems (system: {
@@ -75,6 +84,8 @@
         bats tests/hooks
         touch $out
       '';
+
+      contract-kernel = self.packages.${system}.contract-kernel;
     });
 
     lib = {

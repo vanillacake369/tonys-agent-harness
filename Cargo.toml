@@ -1,0 +1,3 @@
+[workspace]
+members = ["rust/contract-kernel"]
+resolver = "2"
