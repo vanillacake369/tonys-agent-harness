@@ -1,6 +1,7 @@
 use harness_contract_kernel::{
     CONTRACT_VERSION, DecisionKind, DecisionRequest, EnforcementObservation, EnforcementStatus,
-    Grant, GrantScope, LeaseEndCondition, Operation, Resource, ResourceType, decide,
+    Grant, GrantEvent, GrantScope, GrantState, LeaseEndCondition, Operation, Resource,
+    ResourceType, decide, transition_grant,
 };
 
 fn request() -> DecisionRequest {
@@ -40,7 +41,8 @@ fn request() -> DecisionRequest {
             scope: GrantScope::Task,
             expires_at: 200,
             end_condition: LeaseEndCondition::TaskEnd,
-            revoked: false,
+            state: GrantState::Active,
+            revocation_evidence: None,
             approval_identity: "human:owner".into(),
             evidence_ref: "evidence:approval-1".into(),
             policy_revision: "policy-v1".into(),
@@ -120,7 +122,7 @@ fn expired_revoked_or_identity_mismatched_grants_do_not_allow() {
     expired.grants[0].expires_at = expired.now;
     cases.push(expired);
     let mut revoked = request();
-    revoked.grants[0].revoked = true;
+    revoked.grants[0].state = GrantState::Revoked;
     cases.push(revoked);
     let mut other_task = request();
     other_task.grants[0].task_id = "task-2".into();
@@ -128,6 +130,53 @@ fn expired_revoked_or_identity_mismatched_grants_do_not_allow() {
     for input in cases {
         assert_eq!(decide(&input).decision, DecisionKind::Ask);
     }
+}
+
+#[test]
+fn grant_lifecycle_records_revocation_and_expiry_evidence() {
+    let mut grant = request().grants.remove(0);
+    transition_grant(
+        &mut grant,
+        GrantEvent::Revoke {
+            evidence_ref: "evidence:revoke-1".into(),
+        },
+    )
+    .expect("revoke active grant");
+    assert_eq!(grant.state, GrantState::Revoked);
+    assert_eq!(
+        grant.revocation_evidence.as_deref(),
+        Some("evidence:revoke-1")
+    );
+
+    let mut expired = request().grants.remove(0);
+    transition_grant(&mut expired, GrantEvent::ObserveTime { now: 200 })
+        .expect("expire elapsed grant");
+    assert_eq!(expired.state, GrantState::Expired);
+}
+
+#[test]
+fn terminal_grant_state_cannot_be_reactivated_or_rewritten() {
+    let mut grant = request().grants.remove(0);
+    transition_grant(
+        &mut grant,
+        GrantEvent::Revoke {
+            evidence_ref: "evidence:revoke-1".into(),
+        },
+    )
+    .expect("first revoke");
+    assert!(
+        transition_grant(
+            &mut grant,
+            GrantEvent::Revoke {
+                evidence_ref: "evidence:revoke-2".into(),
+            },
+        )
+        .is_err()
+    );
+    assert_eq!(
+        grant.revocation_evidence.as_deref(),
+        Some("evidence:revoke-1")
+    );
 }
 
 #[test]

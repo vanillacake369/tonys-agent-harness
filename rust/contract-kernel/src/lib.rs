@@ -36,6 +36,21 @@ pub enum LeaseEndCondition {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum GrantState {
+    Active,
+    Revoked,
+    Expired,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(tag = "event", rename_all = "snake_case")]
+pub enum GrantEvent {
+    Revoke { evidence_ref: String },
+    ObserveTime { now: u64 },
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct Resource {
     pub resource_type: ResourceType,
     pub canonical_target: String,
@@ -55,7 +70,8 @@ pub struct Grant {
     pub scope: GrantScope,
     pub expires_at: u64,
     pub end_condition: LeaseEndCondition,
-    pub revoked: bool,
+    pub state: GrantState,
+    pub revocation_evidence: Option<String>,
     pub approval_identity: String,
     pub evidence_ref: String,
     pub policy_revision: String,
@@ -198,6 +214,10 @@ fn valid_grant(grant: &Grant, policy_revision: &str) -> bool {
         && nonempty(&grant.approval_identity)
         && nonempty(&grant.evidence_ref)
         && grant.policy_revision == policy_revision
+        && match grant.state {
+            GrantState::Active | GrantState::Expired => grant.revocation_evidence.is_none(),
+            GrantState::Revoked => grant.revocation_evidence.as_deref().is_some_and(nonempty),
+        }
         && !grant.allowed_operations.is_empty()
         && grant
             .allowed_operations
@@ -224,6 +244,27 @@ fn valid_grant(grant: &Grant, policy_revision: &str) -> bool {
             canonical_target: grant.canonical_target.clone(),
             operation: grant.allowed_operations[0].clone(),
         })
+}
+
+pub fn transition_grant(grant: &mut Grant, event: GrantEvent) -> Result<(), &'static str> {
+    if grant.state != GrantState::Active {
+        return Err("grant_state_is_terminal");
+    }
+    match event {
+        GrantEvent::Revoke { evidence_ref } => {
+            if !nonempty(&evidence_ref) {
+                return Err("revocation_evidence_required");
+            }
+            grant.state = GrantState::Revoked;
+            grant.revocation_evidence = Some(evidence_ref);
+        }
+        GrantEvent::ObserveTime { now } => {
+            if now >= grant.expires_at {
+                grant.state = GrantState::Expired;
+            }
+        }
+    }
+    Ok(())
 }
 
 fn resource_matches(grant: &Grant, requested: &Resource) -> bool {
@@ -294,7 +335,7 @@ pub fn decide(request: &DecisionRequest) -> Decision {
     }
     let grant = request.grants.iter().find(|grant| {
         valid_grant(grant, &request.policy_revision)
-            && !grant.revoked
+            && grant.state == GrantState::Active
             && grant.expires_at > request.now
             && identity_matches(grant, request)
             && resource_matches(grant, &request.resource)
