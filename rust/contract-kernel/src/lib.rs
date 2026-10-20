@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::path::{Component, Path};
 
 pub const CONTRACT_VERSION: u32 = 1;
@@ -94,6 +95,44 @@ pub struct EnforcementObservation {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+pub struct ProviderObservation {
+    pub provider: String,
+    pub provider_version: String,
+    pub desired_digest: String,
+    pub applied_digest: Option<String>,
+    pub observed_digest: Option<String>,
+    pub enforcement_status: EnforcementStatus,
+    pub evidence_ref: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+pub struct ReconcileRequest {
+    pub contract_version: u32,
+    pub desired_digest: String,
+    pub providers: Vec<String>,
+    pub observations: Vec<ProviderObservation>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ReconcileStatus {
+    InSync,
+    Drifted,
+    PartiallyEnforced,
+    Unenforceable,
+    Error,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+pub struct ReconcileResult {
+    pub contract_version: u32,
+    pub mode: String,
+    pub authoritative: bool,
+    pub status: ReconcileStatus,
+    pub reason_code: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct DecisionRequest {
     pub contract_version: u32,
     pub request_id: String,
@@ -158,6 +197,74 @@ fn unavailable(request: &DecisionRequest, reason_code: &str) -> Decision {
 
 fn nonempty(value: &str) -> bool {
     !value.trim().is_empty()
+}
+
+fn known_provider(provider: &str) -> bool {
+    matches!(provider, "codex" | "claude" | "gemini" | "kiro")
+}
+
+fn reconciliation(status: ReconcileStatus, reason_code: &str) -> ReconcileResult {
+    ReconcileResult {
+        contract_version: CONTRACT_VERSION,
+        mode: "shadow".into(),
+        authoritative: false,
+        status,
+        reason_code: reason_code.into(),
+    }
+}
+
+pub fn reconcile(request: &ReconcileRequest) -> ReconcileResult {
+    if request.contract_version != CONTRACT_VERSION
+        || !nonempty(&request.desired_digest)
+        || request.providers.is_empty()
+        || request
+            .providers
+            .iter()
+            .any(|provider| !known_provider(provider))
+    {
+        return reconciliation(ReconcileStatus::Error, "invalid_reconcile_request");
+    }
+    let selected: BTreeSet<_> = request.providers.iter().collect();
+    if selected.len() != request.providers.len() {
+        return reconciliation(ReconcileStatus::Error, "duplicate_provider");
+    }
+
+    let mut observed = BTreeSet::new();
+    for observation in &request.observations {
+        if !selected.contains(&observation.provider)
+            || !observed.insert(&observation.provider)
+            || !nonempty(&observation.provider_version)
+            || !nonempty(&observation.evidence_ref)
+            || observation.desired_digest != request.desired_digest
+        {
+            return reconciliation(ReconcileStatus::Error, "invalid_provider_observation");
+        }
+    }
+    if request
+        .observations
+        .iter()
+        .any(|observation| observation.enforcement_status == EnforcementStatus::Unsupported)
+    {
+        return reconciliation(ReconcileStatus::Unenforceable, "provider_unsupported");
+    }
+    if observed.len() != selected.len()
+        || request
+            .observations
+            .iter()
+            .any(|observation| observation.enforcement_status == EnforcementStatus::Unobserved)
+    {
+        return reconciliation(
+            ReconcileStatus::PartiallyEnforced,
+            "enforcement_not_fully_observed",
+        );
+    }
+    if request.observations.iter().any(|observation| {
+        observation.applied_digest.as_deref() != Some(request.desired_digest.as_str())
+            || observation.observed_digest.as_deref() != Some(request.desired_digest.as_str())
+    }) {
+        return reconciliation(ReconcileStatus::Drifted, "provider_state_drifted");
+    }
+    reconciliation(ReconcileStatus::InSync, "provider_state_observed")
 }
 
 fn valid_directory_target(value: &str) -> bool {
@@ -319,10 +426,8 @@ pub fn decide(request: &DecisionRequest) -> Decision {
             None,
         );
     }
-    if !matches!(
-        request.provider.as_str(),
-        "codex" | "claude" | "gemini" | "kiro"
-    ) || request.enforcement.provider != request.provider
+    if !known_provider(&request.provider)
+        || request.enforcement.provider != request.provider
         || !nonempty(&request.enforcement.provider_version)
         || !nonempty(&request.enforcement.evidence_ref)
     {
