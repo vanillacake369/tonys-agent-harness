@@ -22,6 +22,23 @@ def run_cli(*args, cwd=None):
 
 
 class HarnessTests(unittest.TestCase):
+    def test_cli_is_a_thin_entrypoint_over_explicit_architecture_boundaries(self):
+        entrypoint = CLI.read_text()
+        self.assertLess(len(entrypoint.splitlines()), 20)
+        self.assertIn("from agent_harness.cli import main", entrypoint)
+
+        expected_modules = {
+            "agent_harness/domain/config.py",
+            "agent_harness/ingress/manifest.py",
+            "agent_harness/control_plane/reconcile.py",
+            "agent_harness/egress/providers.py",
+            "agent_harness/cli.py",
+        }
+        self.assertEqual(
+            {str(path.relative_to(ROOT)) for path in (ROOT / "agent_harness").rglob("*.py") if path.name != "__init__.py"},
+            expected_modules,
+        )
+
     def test_python_normalization_matches_the_shared_contract_fixture(self):
         with tempfile.TemporaryDirectory() as raw:
             project = Path(raw)
