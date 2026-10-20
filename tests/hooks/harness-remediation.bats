@@ -361,8 +361,8 @@ JSON
 @test "native conformance records unavailable providers without treating them as pass" {
   report="$BATS_TEST_TMPDIR/native.json"
   run env AGENT_PROVIDER_PATH=/nonexistent bash "$GOV/provider-native-conformance.sh" --output "$report" --repo "$ROOT"
-  [ "$status" -eq 2 ]
-  run jq -e '.status == "INCOMPLETE" and ([.providers[] | select(.status == "UNAVAILABLE")] | length == 4)' "$report"
+  [ "$status" -eq 0 ]
+  run jq -e '.status == "COMPLETE_WITH_EXPLICIT_GAPS" and ([.providers[] | select(.status == "UNAVAILABLE")] | length == 4) and ([.providers[] | select(.status | test("VERIFIED$"))] | length == 0)' "$report"
   [ "$status" -eq 0 ]
 }
 
@@ -377,6 +377,29 @@ SH
   report="$BATS_TEST_TMPDIR/native-startup-failure.json"
   run env AGENT_PROVIDER_PATH="$bindir" bash "$GOV/provider-native-conformance.sh" --output "$report" --repo "$ROOT"
   [ "$status" -eq 2 ]
-  run jq -e '.providers[] | select(.provider == "codex") | .status == "FAIL" and (.evidence | contains("startup"))' "$report"
+  run jq -e '.providers[] | select(.provider == "codex") | .status == "FAILED" and (.evidence | contains("startup")) and .command_result == "harmless=2"' "$report"
+  [ "$status" -eq 0 ]
+}
+
+@test "native conformance binds generated and source digests without treating exit 134 as denial" {
+  generated="$BATS_TEST_TMPDIR/generated"; mkdir "$generated"
+  printf '{"source_digest":"%064d"}\n' 0 > "$generated/manifest.json"
+  bindir="$BATS_TEST_TMPDIR/abort-bin"; mkdir "$bindir"
+  cat > "$bindir/codex" <<'SH'
+#!/usr/bin/env bash
+[[ "${1:-}" == --version ]] && { echo 'codex-fixture 134'; exit 0; }
+exit 134
+SH
+  chmod +x "$bindir/codex"
+  report="$BATS_TEST_TMPDIR/native-bound.json"
+  run env AGENT_PROVIDER_PATH="$bindir" bash "$GOV/provider-native-conformance.sh" --output "$report" --repo "$ROOT" --generated "$generated"
+  [ "$status" -eq 0 ]
+  expected=$(shasum -a 256 "$generated/manifest.json" | awk '{print $1}')
+  run jq -e --arg generated "$expected" --arg activated "$(cd "$generated" && pwd -P)" '
+    .source_digest == ("0" * 64)
+    and .generated_digest == $generated
+    and .activated_path == $activated
+    and (.providers[] | select(.provider == "codex") | .status == "UNAVAILABLE" and .command_result == "harmless=134")
+  ' "$report"
   [ "$status" -eq 0 ]
 }
