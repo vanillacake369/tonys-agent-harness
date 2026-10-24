@@ -1,4 +1,7 @@
 {
+  "operations": {
+    "profile": "default-allow-operations-v1"
+  },
   "approval": {
     "destructive": true,
     "expected_fingerprint": "",

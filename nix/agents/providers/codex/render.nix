@@ -23,13 +23,13 @@
 
   # Codex hook은 provider runtime 이벤트를 공통 알림 hook으로 연결하는 얇은 adapter다.
   # hook 자체의 행위 정책은 providers/claude/hooks 쪽 shell test가 검증한다.
-  providerHooks = {
+  mkProviderHooks = {}: {
     SessionStart = [
       {
         hooks = [
           {
             type = "command";
-            command = "python3 ~/.config/agents/governance/task-lifecycle.py start";
+            command = "~/.nix-profile/bin/python3 ~/.config/agents/governance/policy-preflight.py --provider codex --managed-fragment harness-policy-preflight-v1 && ~/.nix-profile/bin/python3 ~/.config/agents/governance/task-lifecycle.py start";
             timeout = 10;
           }
         ];
@@ -41,7 +41,7 @@
         hooks = [
           {
             type = "command";
-            command = "bash ~/.config/agents/governance/pre-tool-gate.sh";
+            command = "bash ~/.config/agents/governance/pre-tool-gate.sh --provider codex --profile default-allow-operations-v1 --managed-fragment harness-operation-policy-v1";
             timeout = 5;
           }
         ];
@@ -76,6 +76,7 @@
       }
     ];
   };
+  providerHooks = mkProviderHooks {};
 
   # Codex MCP schema는 remote server에서 stdio 필드를 제거하고 header 이름을 바꾼다.
   # disabled 기본값은 Codex의 enabled 필드로 명시해서 출력한다.
@@ -189,7 +190,7 @@
     })
     workflowIndex.skillBundles;
 in {
-  inherit contracts capabilities codexModel codexTui providerHooks renderMcpServer;
+  inherit contracts capabilities codexModel codexTui providerHooks mkProviderHooks renderMcpServer;
   inherit (workflowIndex) commandWorkflows legacyWorkflows skillBundles sharedGuide;
   inherit codexSkills skillBundleSkills;
 }

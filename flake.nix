@@ -49,7 +49,7 @@
     checks = forAllSystems (system: let
       pkgs = nixpkgs.legacyPackages.${system};
     in {
-      tests = pkgs.runCommand "tonys-agent-harness-tests" {nativeBuildInputs = [pkgs.python3 pkgs.jq pkgs.git pkgs.openssl];} ''
+      tests = pkgs.runCommand "tonys-agent-harness-tests" {nativeBuildInputs = [(pkgs.python3.withPackages (ps: [ps.tomli-w])) pkgs.jq pkgs.git pkgs.openssl];} ''
         cp -R ${self} source
         chmod -R u+w source
         cd source

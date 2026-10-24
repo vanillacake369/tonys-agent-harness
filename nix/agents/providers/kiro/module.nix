@@ -49,20 +49,29 @@
     version = "v1";
     hooks = [
       {
-        name = "engineering-baseline";
+        name = "harness-policy-preflight-v1";
         trigger = "AgentSpawn";
         action = {
           type = "command";
-          command = "python3 ~/.config/agents/governance/task-lifecycle.py start";
+          command = "~/.nix-profile/bin/python3 ~/.config/agents/governance/policy-preflight.py --provider kiro --managed-fragment harness-policy-preflight-v1 && ~/.nix-profile/bin/python3 ~/.config/agents/governance/task-lifecycle.py start";
         };
       }
       {
-        name = "engineering-pre-tool";
+        name = "harness-operation-policy-v1";
         trigger = "PreToolUse";
-        matcher = "^(execute_bash|execute_pwsh|fs_read|fs_write|fs_append|str_replace|delete_file)$";
+        matcher = "^(execute_bash|execute_pwsh)$";
         action = {
           type = "command";
-          command = "bash ~/.config/agents/governance/pre-tool-gate.sh";
+          command = "bash ~/.config/agents/governance/pre-tool-gate.sh --provider kiro --profile default-allow-operations-v1 --managed-fragment harness-operation-policy-v1";
+        };
+      }
+      {
+        name = "harness-path-invariants-v1";
+        trigger = "PreToolUse";
+        matcher = "^(fs_read|fs_write|fs_append|str_replace|delete_file)$";
+        action = {
+          type = "command";
+          command = "bash ~/.config/agents/governance/path-guard.sh --managed-fragment harness-path-invariants-v1";
         };
       }
       {
@@ -84,13 +93,13 @@
       }
     ];
   };
+  governanceHooksFile = json.generate "kiro-engineering-governance.json" governanceHooks;
 in {
   home.file =
     {
       ".kiro/tonys-nix/steering/AGENTS.md".source = ../../../../AGENTS.md;
       ".kiro/tonys-nix/steering/agent-contract.md".text = kiroRender.steering;
       ".kiro/skills/a2a-workflow".source = ../../skills/a2a-workflow;
-      ".kiro/hooks/engineering-governance.json".source = json.generate "kiro-engineering-governance.json" governanceHooks;
     }
     // agentFiles
     // workflowSkillFiles
@@ -102,5 +111,11 @@ in {
   home.activation.seedKiroMcp = providerSettings.mkSeedFileCopy {
     target = "$HOME/.kiro/settings/mcp.json";
     source = "${mcpSourceFile}";
+  };
+
+  home.activation.syncKiroHooks = providerSettings.mkSync {
+    name = "kiro-hooks";
+    target = "$HOME/.kiro/hooks/engineering-governance.json";
+    source = "${governanceHooksFile}";
   };
 }

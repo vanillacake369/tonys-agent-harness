@@ -1,0 +1,31 @@
+schema_version = 1
+preset = "minimal"
+
+[project]
+instruction = "AGENTS.md"
+spec_root = ".codex"
+
+[providers]
+codex = true
+claude = false
+gemini = false
+kiro = false
+
+[operations]
+profile = "default-allow-operations-v1"
+
+[permissions]
+secret_access = "deny"
+reviewer_write = false
+researcher_write = false
+single_writer = true
+
+[approval]
+production = true
+destructive = true
+migration = true
+external_mutation = true
+
+[verification]
+retry_max = 3
+require_clean_git_for_done = true

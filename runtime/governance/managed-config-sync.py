@@ -133,7 +133,10 @@ def main() -> int:
         prior = json.loads(state_path.read_text()) if args.remove_fragments and state_path.exists() else None
         output = json.dumps(rollback(existing, prior) if args.remove_fragments else merge(existing, desired), indent=2, sort_keys=True) + "\n"
     else:
-        import tomli_w
+        try:
+            import tomli_w
+        except ImportError:  # Developer shells commonly expose the compatible `toml` writer.
+            import toml as tomli_w
         if target.exists():
             with target.open("rb") as handle: existing = tomllib.load(handle)
         else: existing = {}

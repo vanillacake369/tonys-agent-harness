@@ -87,6 +87,7 @@
   rendered = mcpRender mockServers;
   guideText = builtins.readFile ../../AGENTS.md;
   moduleText = builtins.readFile ../../nix/agents/runtime-module.hm.nix;
+  runtimeHooksText = builtins.readFile ../../nix/agents/runtime-hooks.nix;
   homeManagerModuleText = builtins.readFile ../../nix/home-manager-module.nix;
   secretsModuleText = builtins.readFile ../../nix/agents/runtime-secrets.hm.nix;
   roleNames = builtins.attrNames codexBindings.roles;
@@ -97,6 +98,10 @@
   sampleSettings = codexBindings.mkSettings {
     hooks = codexRender.providerHooks;
     mcp = {test-server = {enabled = true;};};
+  };
+  permissiveSettings = codexBindings.mkSettings {
+    hooks = codexRender.mkProviderHooks {};
+    mcp = {};
   };
   codexHeadersRemoved = !(rendered.codex.test-server ? headers);
   sampleSettingsHasNoTui = !(sampleSettings ? tui);
@@ -253,9 +258,15 @@ in {
     (assert' "GIVEN agent module WHEN provider exporters are wired THEN Codex and Kiro are activated" (
       lib.hasInfix "./providers/codex/module.nix" moduleText
       && lib.hasInfix "./providers/kiro/module.nix" moduleText
-      && !(lib.hasInfix "./providers/claude/module.nix" moduleText)
-      && !(lib.hasInfix "./providers/gemini/module.nix" moduleText)
+      && lib.hasInfix "./providers/claude/module.nix" moduleText
+      && lib.hasInfix "./providers/gemini/module.nix" moduleText
       && !(lib.hasInfix "./runtime-proxy.nix" moduleText)
+    ))
+    (assert' "GIVEN operation hooks WHEN runtime activates THEN classifier feedback and preflight dependencies are installed" (
+      lib.hasInfix "execution-gate.py" runtimeHooksText
+      && lib.hasInfix "operation_policy.py" runtimeHooksText
+      && lib.hasInfix "policy-feedback.py" runtimeHooksText
+      && lib.hasInfix "policy-preflight.py" runtimeHooksText
     ))
     (assert' "GIVEN workflow index WHEN index text is checked THEN workflow data stays focused" (
       builtins.hasAttr "commandWorkflows" workflowIndex
@@ -476,10 +487,23 @@ in {
       sampleSettings.hooks
       == codexRender.providerHooks
       && sampleSettings.mcp_servers.test-server.enabled == true
-      && sampleSettings.default_permissions == "default"
+      && sampleSettings.default_permissions == "default-allow-operations-v1"
       && !(sampleSettings ? agents)
     ))
     (assert' "GIVEN Codex settings WHEN rendered THEN provider bridge data stays focused" sampleSettingsHasNoTui)
+    (assert' "GIVEN Codex permissive operations WHEN rendered THEN the profile stays explicit and sandboxed" (
+      permissiveSettings.default_permissions == "default-allow-operations-v1"
+      && permissiveSettings.approval_policy == "never"
+      && permissiveSettings.features.network_proxy == true
+      && permissiveSettings.permissions.default-allow-operations-v1.filesystem."~/dev"."." == "read"
+      && permissiveSettings.permissions.default-allow-operations-v1.filesystem.":workspace_roots"."." == "write"
+      && permissiveSettings.permissions.default-allow-operations-v1.filesystem."~/.ssh" == "deny"
+      && permissiveSettings.permissions.default-allow-operations-v1.network.enabled == true
+      && permissiveSettings.permissions.default-allow-operations-v1.network.allow_local_binding == true
+      && permissiveSettings.permissions.default-allow-operations-v1.network.domains."*" == "allow"
+      && lib.hasInfix "--provider codex --profile default-allow-operations-v1"
+        (builtins.head (builtins.head permissiveSettings.hooks.PreToolUse).hooks).command
+    ))
     (assert' "GIVEN Claude settings WHEN static hooks are loaded THEN native hook groups remain present" (
       claudeBaseSettings.hooks ? UserPromptSubmit
       && claudeBaseSettings.hooks ? PreToolUse

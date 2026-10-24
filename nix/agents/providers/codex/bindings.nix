@@ -89,6 +89,22 @@
       })
     contracts.permissions;
 
+  defaultAllowOperationsProfile = {
+    filesystem = {
+      ":minimal" = "read";
+      "~/.ssh" = "deny";
+      "~/.gnupg" = "deny";
+      "~/dev" = {"." = "read";} // secretDenyAttrs;
+      ":workspace_roots" = {"." = "write";} // secretDenyAttrs;
+      glob_scan_max_depth = 8;
+    };
+    network = {
+      enabled = true;
+      allow_local_binding = true;
+      domains."*" = "allow";
+    };
+  };
+
   # Codex custom agent가 공유 역할 계약을 따르도록 developer instruction을 생성한다.
   # provider 전용 TOML에는 역할 설명과 운영 경계만 담는다.
   mkDeveloperInstructions = name: role: ''
@@ -226,9 +242,14 @@ in {
     hooks ? {},
     mcp ? {},
   }: {
-    default_permissions = "default";
-    permissions = permissionProfiles;
+    default_permissions = "default-allow-operations-v1";
+    permissions = permissionProfiles // {
+      default-allow-operations-v1 = defaultAllowOperationsProfile;
+    };
     inherit hooks;
     mcp_servers = mcp;
+  } // {
+    approval_policy = "never";
+    features.network_proxy = true;
   };
 }

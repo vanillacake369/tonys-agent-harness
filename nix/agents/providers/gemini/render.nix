@@ -35,7 +35,7 @@ in {
         hooks = [
           {
             type = "command";
-            command = "python3 ~/.config/agents/governance/task-lifecycle.py start";
+            command = "~/.nix-profile/bin/python3 ~/.config/agents/governance/policy-preflight.py --provider gemini --managed-fragment harness-policy-preflight-v1 && ~/.nix-profile/bin/python3 ~/.config/agents/governance/task-lifecycle.py start";
             timeout = 10000;
           }
         ];
@@ -43,11 +43,11 @@ in {
     ];
     BeforeTool = [
       {
-        matcher = "run_shell_command";
+        matcher = "run_shell_command|read_file|write_file|replace|replace_in_file";
         hooks = [
           {
             type = "command";
-            command = "bash ~/.config/agents/governance/retry-hook.sh pre";
+            command = "bash ~/.config/agents/governance/pre-tool-gate.sh --provider gemini --profile default-allow-operations-v1 --managed-fragment harness-operation-policy-v1";
             timeout = 5000;
           }
         ];

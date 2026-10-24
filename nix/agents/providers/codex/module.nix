@@ -39,7 +39,7 @@ in {
     syncName = "codex-config";
     target = "$HOME/.codex/config.toml";
     type = "toml";
-    baseHooks = codexRender.providerHooks;
+    baseHooks = codexRender.mkProviderHooks {};
     preserveTomlKeys = [
       "hooks.state"
       "projects"

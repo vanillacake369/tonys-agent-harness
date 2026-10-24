@@ -22,7 +22,7 @@ Authoritative specification:
 ## Verification commands and results
 
 - `PATH=/Users/vpplab/.nix-profile/bin:$PATH python3 -m unittest discover -s tests -v`:
-  PASS (53 tests).
+  PASS (54 tests).
 - `PATH=/Users/vpplab/.nix-profile/bin:$PATH bats tests/hooks`: PASS (131 tests).
 - `PATH=/Users/vpplab/.nix-profile/bin:/nix/var/nix/profiles/default/bin:$PATH just check`:
   PASS.

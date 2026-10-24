@@ -54,7 +54,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ~/.config/agents/governance/task-lifecycle.py start",
+            "command": "~/.nix-profile/bin/python3 ~/.config/agents/governance/policy-preflight.py --provider claude --managed-fragment harness-policy-preflight-v1 && ~/.nix-profile/bin/python3 ~/.config/agents/governance/task-lifecycle.py start",
             "timeout": 10
           }
         ]
@@ -83,11 +83,21 @@
         ]
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.config/agents/governance/pre-tool-gate.sh --provider claude --profile default-allow-operations-v1 --managed-fragment harness-operation-policy-v1",
+            "timeout": 5
+          }
+        ]
+      },
+      {
         "matcher": "Read|Write|Edit|NotebookEdit",
         "hooks": [
           {
             "type": "command",
-            "command": "~/.config/agents/governance/path-guard.sh",
+            "command": "~/.config/agents/governance/path-guard.sh --managed-fragment harness-path-invariants-v1",
             "timeout": 5
           }
         ]
