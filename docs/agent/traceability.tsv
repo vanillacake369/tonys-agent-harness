@@ -29,3 +29,18 @@ self	73bd39d	4	PH-0403	verified	docs/agent/prd/phase-0-5.md	runtime/governance/s
 self	73bd39d	5	PH-0501	verified	docs/agent/prd/phase-0-5.md	runtime/governance/external-operation.sh	tests/hooks/harness-remediation.bats	docs/agent/evidence/phase-5-verification.json
 self	73bd39d	5	PH-0502	verified	docs/agent/prd/phase-0-5.md	runtime/governance/external-operation.sh;runtime/orchestrator/execution-authorize.sh	tests/hooks/harness-remediation.bats	docs/agent/evidence/phase-5-verification.json
 self	73bd39d	5	PH-0503	verified	docs/agent/prd/phase-0-5.md	assets/commands/cmd-post-ship-ljh.md;runtime/orchestrator/execution-plan.sh	tests/hooks/orchestrator-router.bats	docs/agent/evidence/phase-5-verification.json
+self	PLANNED	6	DAOR2-001	planned	docs/agent/spec/default-allow-operations-v2.md	agent_harness/ingress/manifest.py	tests/test_default_allow_operations.py	UNVERIFIED:implementation pending
+self	PLANNED	6	DAOR2-002	planned	docs/agent/spec/default-allow-operations-v2.md	runtime/governance/policy-runtime.py	tests/test_default_allow_operations.py	UNVERIFIED:implementation pending
+self	PLANNED	6	DAOR2-003	planned	docs/agent/spec/default-allow-operations-v2.md	runtime/governance/policy-runtime.py	tests/test_default_allow_operations.py	UNVERIFIED:implementation pending
+self	PLANNED	6	DAOR2-004	planned	docs/agent/spec/default-allow-operations-v2.md	runtime/governance/policy-runtime.py;runtime/governance/managed-config-sync.py	tests/test_default_allow_operations.py	UNVERIFIED:implementation pending
+self	PLANNED	6	DAOR2-005	planned	docs/agent/spec/default-allow-operations-v2.md	runtime/governance/policy-runtime.py	tests/test_default_allow_operations.py	UNVERIFIED:implementation pending
+self	PLANNED	6	DAOR2-006	planned	docs/agent/spec/default-allow-operations-v2.md	runtime/governance/policy-runtime.py	tests/test_default_allow_operations.py	UNVERIFIED:implementation pending
+self	PLANNED	6	DAOR2-007	planned	docs/agent/spec/default-allow-operations-v2.md	runtime/governance/policy-runtime.py	tests/test_default_allow_operations.py	UNVERIFIED:implementation pending
+self	PLANNED	6	DAOR2-008	planned	docs/agent/spec/default-allow-operations-v2.md	runtime/governance/operation_policy.py	tests/test_default_allow_operations.py	UNVERIFIED:implementation pending
+self	PLANNED	6	DAOR2-009	planned	docs/agent/spec/default-allow-operations-v2.md	runtime/governance/policy-runtime.py;nix/agents/runtime-hooks.nix	tests/test_default_allow_operations.py;tests/nix/agents.test.nix	UNVERIFIED:implementation pending
+self	PLANNED	6	DAOR2-010	planned	docs/agent/spec/default-allow-operations-v2.md	rust/contract-kernel	tests/test_contract_kernel.py;rust/contract-kernel/tests	UNVERIFIED:conditional implementation
+self	PLANNED	6	DAOR2-011	planned	docs/agent/spec/default-allow-operations-v2.md	runtime/governance/provider-native-conformance.sh	tests/hooks/harness-remediation.bats	UNVERIFIED:implementation pending
+self	PLANNED	6	DAOR2-NFR-001	planned	docs/agent/spec/default-allow-operations-v2.md	runtime/governance/policy-runtime.py	tests/benchmarks/operation-policy.py	UNVERIFIED:benchmark pending
+self	PLANNED	6	DAOR2-NFR-002	planned	docs/agent/spec/default-allow-operations-v2.md	runtime/governance/policy-runtime.py	tests/test_default_allow_operations.py	UNVERIFIED:implementation pending
+self	PLANNED	6	DAOR2-NFR-003	planned	docs/agent/spec/default-allow-operations-v2.md	agent_harness/egress/providers.py;nix/agents/providers	tests/test_default_allow_operations.py;tests/nix/agents.test.nix	UNVERIFIED:implementation pending
+self	PLANNED	6	DAOR2-NFR-004	planned	docs/agent/spec/default-allow-operations-v2.md	runtime/governance/policy-runtime.py	tests/test_default_allow_operations.py	UNVERIFIED:implementation pending

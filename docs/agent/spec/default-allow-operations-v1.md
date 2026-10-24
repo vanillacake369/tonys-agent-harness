@@ -1,6 +1,8 @@
-# Default-Allow Operations v1 — Authoritative Implementation Specification
+# Default-Allow Operations v1 — Superseded Implementation Specification
 
-Status: Accepted and authoritative (2026-10-22)
+Status: Superseded by [Default-Allow Operations v2](default-allow-operations-v2.md)
+
+This document is retained as implementation history and is not authoritative.
 
 This document merges and supersedes ADR-0003, the 2026-10-21 permissive
 operations PRD, and its test/TODO workflow. `AGENTS.md` remains the behavioral
@@ -25,10 +27,12 @@ credentials, server-side authorization/admission policy, or a typed broker.
 - The manifest selects one shared operation policy. Provider adapters translate
   the shared contract into native hook/config shapes and cannot redefine it.
 - Codex, Claude, Gemini, and Kiro are supported when their hook porter is active.
-- An installed and activated provider is `ENFORCED` only after static activation
-  and SessionStart preflight succeed. Missing/broken hooks are `FAILED`.
-- An activated provider with no hook porter is `DEGRADED`, and activation fails.
-  An uninstalled provider is `UNAVAILABLE`.
+- Operation-policy activation has one state machine: `PENDING`, `ENFORCED`,
+  `FAILED`, `UNAVAILABLE`, or `UNSUPPORTED`. Unknown manifest providers fail
+  before activation with `UNKNOWN_PROVIDER`; `DEGRADED` is not a state.
+- Startup performs advisory diagnosis and notification only. `ENFORCED` is
+  established solely by a successful blocking PreTool activation latch for the
+  current scoped fingerprint.
 - Role-specific filesystem/network restrictions remain in force. This profile
   changes operation classification, not agent-role ownership.
 
@@ -39,16 +43,18 @@ credentials, server-side authorization/admission policy, or a typed broker.
 2. Deny an exact recognized rule below and emit its stable reason ID.
 3. Allow everything else, including parse failures.
 
-Denied commands exit immediately. The agent-visible stderr includes the
-original command and asks the user to review, execute it directly if desired,
-and report the result. A best-effort desktop notification contains only command
+Denied commands enter one feedback path and ask the user to review, execute the
+operation directly if desired, and report the result. Ordinary feedback may
+include the original command. Secret/credential reasons and privacy-tainted
+payloads redact it. A best-effort desktop notification contains only command
 family and reason. Notification failure never allows the command and never
 causes an unbounded wait/retry.
 
 Telemetry stores only timestamp, provider, command family, reason ID, and a
 SHA-256 command hash. It never stores raw commands, SQL, secrets, or credentials.
 The same session + command hash + reason notification is deduplicated for 60
-seconds.
+seconds. Telemetry append and dedupe state are concurrency-safe and fail without
+changing the denial decision.
 
 ## Versioned command matrix
 
@@ -103,9 +109,11 @@ and SSOT.
 Activation upserts the managed fragment without replacing whole files or hook
 arrays, preserves provider-added model/UI/project/plugin/hook settings, repairs
 deleted/tampered managed entries, migrates known provider schemas, and creates
-timestamped mode-0600 backups retaining the newest three. SessionStart performs
-a lightweight existence/executability/managed-hook preflight; failure notifies
-and stops the session.
+timestamped mode-0600 backups retaining the newest three. Startup performs
+lightweight advisory diagnosis. The blocking PreTool latch validates relevant
+managed structure and runtime identity before classification; failure notifies
+and blocks the tool. Hook removal remains detectable only by doctor or a later
+activation.
 
 ## Implementation workflow and acceptance
 
@@ -139,3 +147,7 @@ safe denial feedback, managed-fragment preservation/repair/backup behavior,
 truthful activation states, green documented verification, and downstream
 consumption. Rollback selects the prior policy/removes the stable managed
 fragment; provider-owned settings and backups remain recoverable.
+
+The standalone `curl | sh`/`curl | bash` path-guard rule is not part of the
+matrix and must be removed; HTTP and downloaded scripts remain accepted
+default-allow residual risk.
