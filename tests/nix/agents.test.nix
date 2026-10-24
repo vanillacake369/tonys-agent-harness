@@ -262,11 +262,11 @@ in {
       && lib.hasInfix "./providers/gemini/module.nix" moduleText
       && !(lib.hasInfix "./runtime-proxy.nix" moduleText)
     ))
-    (assert' "GIVEN operation hooks WHEN runtime activates THEN classifier feedback and preflight dependencies are installed" (
+    (assert' "GIVEN operation hooks WHEN runtime activates THEN classifier feedback and policy authority are installed" (
       lib.hasInfix "execution-gate.py" runtimeHooksText
       && lib.hasInfix "operation_policy.py" runtimeHooksText
       && lib.hasInfix "policy-feedback.py" runtimeHooksText
-      && lib.hasInfix "policy-preflight.py" runtimeHooksText
+      && lib.hasInfix "policy-runtime.py" runtimeHooksText
     ))
     (assert' "GIVEN workflow index WHEN index text is checked THEN workflow data stays focused" (
       builtins.hasAttr "commandWorkflows" workflowIndex
@@ -501,7 +501,7 @@ in {
       && permissiveSettings.permissions.default-allow-operations-v1.network.enabled == true
       && permissiveSettings.permissions.default-allow-operations-v1.network.allow_local_binding == true
       && permissiveSettings.permissions.default-allow-operations-v1.network.domains."*" == "allow"
-      && lib.hasInfix "--provider codex --profile default-allow-operations-v1"
+      && lib.hasInfix "--provider codex --surface cli --profile default-allow-operations-v1"
         (builtins.head (builtins.head permissiveSettings.hooks.PreToolUse).hooks).command
     ))
     (assert' "GIVEN Claude settings WHEN static hooks are loaded THEN native hook groups remain present" (

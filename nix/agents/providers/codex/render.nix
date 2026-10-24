@@ -29,7 +29,7 @@
         hooks = [
           {
             type = "command";
-            command = "~/.config/agents/governance/python3 ~/.config/agents/governance/policy-preflight.py --provider codex --managed-fragment harness-policy-preflight-v1 && ~/.config/agents/governance/python3 ~/.config/agents/governance/task-lifecycle.py start";
+            command = "~/.config/agents/governance/python3 ~/.config/agents/governance/policy-runtime.py startup --provider codex --surface cli --managed-fragment harness-policy-preflight-v1; ~/.config/agents/governance/python3 ~/.config/agents/governance/task-lifecycle.py start";
             timeout = 10;
           }
         ];
@@ -41,7 +41,7 @@
         hooks = [
           {
             type = "command";
-            command = "bash ~/.config/agents/governance/pre-tool-gate.sh --provider codex --profile default-allow-operations-v1 --managed-fragment harness-operation-policy-v1";
+            command = "~/.config/agents/governance/python3 ~/.config/agents/governance/policy-runtime.py pretool --provider codex --surface cli --profile default-allow-operations-v1 --managed-fragment harness-operation-policy-v1";
             timeout = 5;
           }
         ];

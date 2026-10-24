@@ -54,7 +54,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.config/agents/governance/python3 ~/.config/agents/governance/policy-preflight.py --provider claude --managed-fragment harness-policy-preflight-v1 && ~/.config/agents/governance/python3 ~/.config/agents/governance/task-lifecycle.py start",
+            "command": "~/.config/agents/governance/python3 ~/.config/agents/governance/policy-runtime.py startup --provider claude --surface cli --managed-fragment harness-policy-preflight-v1; ~/.config/agents/governance/python3 ~/.config/agents/governance/task-lifecycle.py start",
             "timeout": 10
           }
         ]
@@ -87,7 +87,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.config/agents/governance/pre-tool-gate.sh --provider claude --profile default-allow-operations-v1 --managed-fragment harness-operation-policy-v1",
+            "command": "~/.config/agents/governance/python3 ~/.config/agents/governance/policy-runtime.py pretool --provider claude --surface cli --profile default-allow-operations-v1 --managed-fragment harness-operation-policy-v1",
             "timeout": 5
           }
         ]
@@ -97,32 +97,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.config/agents/governance/path-guard.sh --managed-fragment harness-path-invariants-v1",
-            "timeout": 5
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.config/agents/governance/retry-hook.sh pre",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/cmd-guard.sh",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "~/.config/agents/governance/path-guard.sh",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/branch-guard.sh",
+            "command": "~/.config/agents/governance/python3 ~/.config/agents/governance/policy-runtime.py pretool --provider claude --surface cli --profile default-allow-operations-v1 --managed-fragment harness-path-invariants-v1",
             "timeout": 5
           }
         ]

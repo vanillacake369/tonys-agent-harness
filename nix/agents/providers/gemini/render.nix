@@ -35,7 +35,7 @@ in {
         hooks = [
           {
             type = "command";
-            command = "~/.config/agents/governance/python3 ~/.config/agents/governance/policy-preflight.py --provider gemini --managed-fragment harness-policy-preflight-v1 && ~/.config/agents/governance/python3 ~/.config/agents/governance/task-lifecycle.py start";
+            command = "~/.config/agents/governance/python3 ~/.config/agents/governance/policy-runtime.py startup --provider gemini --surface cli --managed-fragment harness-policy-preflight-v1; ~/.config/agents/governance/python3 ~/.config/agents/governance/task-lifecycle.py start";
             timeout = 10000;
           }
         ];
@@ -47,7 +47,7 @@ in {
         hooks = [
           {
             type = "command";
-            command = "bash ~/.config/agents/governance/pre-tool-gate.sh --provider gemini --profile default-allow-operations-v1 --managed-fragment harness-operation-policy-v1";
+            command = "~/.config/agents/governance/python3 ~/.config/agents/governance/policy-runtime.py pretool --provider gemini --surface cli --profile default-allow-operations-v1 --managed-fragment harness-operation-policy-v1";
             timeout = 5000;
           }
         ];

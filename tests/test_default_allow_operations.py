@@ -78,23 +78,22 @@ class DefaultAllowOperationTests(unittest.TestCase):
         codex = tomllib.loads(files["codex/config.toml"].decode())
         self.assertEqual(codex["default_permissions"], "default-allow-operations-v1")
         capabilities = json.loads(files["capabilities.json"])
-        self.assertTrue(all(item["operation_policy"]["activation"] == "PENDING_PREFLIGHT" for item in capabilities.values()))
+        self.assertTrue(all(item["operation_policy"] == {"hook_porter": "implemented", "profile": "default-allow-operations-v1"} for item in capabilities.values()))
         for provider, path in {"claude": "claude/settings.json", "gemini": "gemini/settings.json", "kiro": "kiro/hooks/engineering-governance.json"}.items():
-            self.assertIn(f"--provider {provider} --profile default-allow-operations-v1", files[path].decode())
+            self.assertIn(f"policy-runtime.py pretool --provider {provider} --surface cli --profile default-allow-operations-v1", files[path].decode())
         for path in ("codex/config.toml", "claude/settings.json", "gemini/settings.json", "kiro/hooks/engineering-governance.json"):
             self.assertIn("~/.config/agents/governance/python3", files[path].decode())
 
-    def test_generated_native_hook_shapes_pass_structural_preflight(self):
+    def test_generated_native_hook_shapes_use_advisory_startup_and_one_policy_authority(self):
         data = {"schema_version": 1, "preset": "regulated", "providers": {p: True for p in ("codex", "claude", "gemini", "kiro")}, "operations": {"profile": "default-allow-operations-v1"}}
         files = target_files(normalized(data), b"guide")
         paths = {"codex": "codex/config.toml", "claude": "claude/settings.json", "gemini": "gemini/settings.json", "kiro": "kiro/hooks/engineering-governance.json"}
-        with tempfile.TemporaryDirectory() as tmp:
-            for provider, generated_path in paths.items():
-                config = Path(tmp) / Path(generated_path).name; config.write_bytes(files[generated_path])
-                status = Path(tmp) / f"{provider}.status.json"
-                env = os.environ | {"AGENT_POLICY_CONFIG": str(config), "AGENT_NOTIFY_HOOK": str(Path(tmp) / "absent")}
-                result = subprocess.run([sys.executable, str(PREFLIGHT), "--provider", provider, "--status-file", str(status)], env=env, capture_output=True)
-                self.assertEqual(result.returncode, 0, (provider, result.stderr)); self.assertEqual(json.loads(status.read_text())["status"], "ENFORCED")
+        for provider, generated_path in paths.items():
+            rendered = files[generated_path].decode()
+            self.assertIn(f"policy-runtime.py startup --provider {provider} --surface cli", rendered)
+            self.assertIn(f"policy-runtime.py pretool --provider {provider} --surface cli", rendered)
+            self.assertNotIn("policy-preflight.py", rendered)
+            self.assertNotIn("bash ~/.config/agents/governance/pre-tool-gate.sh", rendered)
 
     def test_managed_json_fragment_preserves_native_settings_and_repairs_hook(self):
         with tempfile.TemporaryDirectory() as tmp:

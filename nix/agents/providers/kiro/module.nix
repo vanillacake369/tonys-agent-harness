@@ -53,7 +53,7 @@
         trigger = "AgentSpawn";
         action = {
           type = "command";
-          command = "~/.config/agents/governance/python3 ~/.config/agents/governance/policy-preflight.py --provider kiro --managed-fragment harness-policy-preflight-v1 && ~/.config/agents/governance/python3 ~/.config/agents/governance/task-lifecycle.py start";
+          command = "~/.config/agents/governance/python3 ~/.config/agents/governance/policy-runtime.py startup --provider kiro --surface cli --managed-fragment harness-policy-preflight-v1; ~/.config/agents/governance/python3 ~/.config/agents/governance/task-lifecycle.py start";
         };
       }
       {
@@ -62,7 +62,7 @@
         matcher = "^(execute_bash|execute_pwsh)$";
         action = {
           type = "command";
-          command = "bash ~/.config/agents/governance/pre-tool-gate.sh --provider kiro --profile default-allow-operations-v1 --managed-fragment harness-operation-policy-v1";
+          command = "~/.config/agents/governance/python3 ~/.config/agents/governance/policy-runtime.py pretool --provider kiro --surface cli --profile default-allow-operations-v1 --managed-fragment harness-operation-policy-v1";
         };
       }
       {
@@ -71,7 +71,7 @@
         matcher = "^(fs_read|fs_write|fs_append|str_replace|delete_file)$";
         action = {
           type = "command";
-          command = "bash ~/.config/agents/governance/path-guard.sh --managed-fragment harness-path-invariants-v1";
+          command = "~/.config/agents/governance/python3 ~/.config/agents/governance/policy-runtime.py pretool --provider kiro --surface cli --profile default-allow-operations-v1 --managed-fragment harness-path-invariants-v1";
         };
       }
       {

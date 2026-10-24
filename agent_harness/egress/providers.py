@@ -34,7 +34,7 @@ def target_files(config: dict, instruction: bytes) -> dict[str, bytes]:
                     b'default_permissions = "default-allow-operations-v1"\napproval_policy = "never"',
                 ).replace(
                     b'bash ~/.config/agents/governance/pre-tool-gate.sh"',
-                    b'bash ~/.config/agents/governance/pre-tool-gate.sh --provider codex --profile default-allow-operations-v1 --managed-fragment harness-operation-policy-v1"',
+                    b'~/.config/agents/governance/python3 ~/.config/agents/governance/policy-runtime.py pretool --provider codex --surface cli --profile default-allow-operations-v1 --managed-fragment harness-operation-policy-v1"',
                 ) + b'''
 [permissions.default-allow-operations-v1.filesystem]
 ":minimal" = "read"
@@ -74,11 +74,11 @@ network_proxy = true
                 "sandbox": {"enabled": True, "autoAllowBashIfSandboxed": False},
                 "reviewer": {"write": False},
                 "hooks": {
-                    "SessionStart": [{"hooks": [{"type": "command", "command": "~/.config/agents/governance/python3 ~/.config/agents/governance/policy-preflight.py --provider claude --managed-fragment harness-policy-preflight-v1 && ~/.config/agents/governance/python3 ~/.config/agents/governance/task-lifecycle.py start", "timeout": 10}]}],
+                    "SessionStart": [{"hooks": [{"type": "command", "command": "~/.config/agents/governance/python3 ~/.config/agents/governance/policy-runtime.py startup --provider claude --surface cli --managed-fragment harness-policy-preflight-v1; ~/.config/agents/governance/python3 ~/.config/agents/governance/task-lifecycle.py start", "timeout": 10}]}],
                     "PreToolUse": [
                         {"matcher": "mcp__.*", "hooks": [{"type": "command", "command": "bash ~/.config/agents/governance/mcp-hook.sh", "timeout": 5}]},
-                        {"matcher": "Bash", "hooks": [{"type": "command", "command": "bash ~/.config/agents/governance/pre-tool-gate.sh --provider claude --profile default-allow-operations-v1 --managed-fragment harness-operation-policy-v1", "timeout": 5}]},
-                        {"matcher": "Read|Write|Edit|NotebookEdit", "hooks": [{"type": "command", "command": "bash ~/.config/agents/governance/path-guard.sh --managed-fragment harness-path-invariants-v1", "timeout": 5}]},
+                        {"matcher": "Bash", "hooks": [{"type": "command", "command": "~/.config/agents/governance/python3 ~/.config/agents/governance/policy-runtime.py pretool --provider claude --surface cli --profile default-allow-operations-v1 --managed-fragment harness-operation-policy-v1", "timeout": 5}]},
+                        {"matcher": "Read|Write|Edit|NotebookEdit", "hooks": [{"type": "command", "command": "~/.config/agents/governance/python3 ~/.config/agents/governance/policy-runtime.py pretool --provider claude --surface cli --profile default-allow-operations-v1 --managed-fragment harness-path-invariants-v1", "timeout": 5}]},
                     ],
                     "PostToolUseFailure": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "bash ~/.config/agents/governance/retry-hook.sh failure", "timeout": 5}]}],
                     "Stop": [{"hooks": [{"type": "command", "command": "python3 ~/.config/agents/governance/task-lifecycle.py stop", "timeout": 10}]}],
@@ -99,9 +99,9 @@ Review independently and return structured findings. Never mutate files.
             payload = {
                 "context": {"fileName": ["AGENTS.md"]},
                 "hooks": {
-                    "BeforeAgent": [{"hooks": [{"type": "command", "command": "~/.config/agents/governance/python3 ~/.config/agents/governance/policy-preflight.py --provider gemini --managed-fragment harness-policy-preflight-v1 && ~/.config/agents/governance/python3 ~/.config/agents/governance/task-lifecycle.py start", "timeout": 10000}]}],
+                    "BeforeAgent": [{"hooks": [{"type": "command", "command": "~/.config/agents/governance/python3 ~/.config/agents/governance/policy-runtime.py startup --provider gemini --surface cli --managed-fragment harness-policy-preflight-v1; ~/.config/agents/governance/python3 ~/.config/agents/governance/task-lifecycle.py start", "timeout": 10000}]}],
                     "BeforeTool": [
-                        {"matcher": "run_shell_command|read_file|write_file|replace|replace_in_file", "hooks": [{"type": "command", "command": "bash ~/.config/agents/governance/pre-tool-gate.sh --provider gemini --profile default-allow-operations-v1 --managed-fragment harness-operation-policy-v1", "timeout": 5000}]},
+                        {"matcher": "run_shell_command|read_file|write_file|replace|replace_in_file", "hooks": [{"type": "command", "command": "~/.config/agents/governance/python3 ~/.config/agents/governance/policy-runtime.py pretool --provider gemini --surface cli --profile default-allow-operations-v1 --managed-fragment harness-operation-policy-v1", "timeout": 5000}]},
                     ],
                     "AfterTool": [{"matcher": "run_shell_command", "hooks": [{"type": "command", "command": "bash ~/.config/agents/governance/retry-hook.sh post", "timeout": 5000}]}],
                     "AfterAgent": [{"hooks": [{"type": "command", "command": "python3 ~/.config/agents/governance/task-lifecycle.py stop", "timeout": 5000}]}],
@@ -114,12 +114,12 @@ Review independently and return structured findings. Never mutate files.
                 "permissions": {"fs_write": "deny", "secret_access": "deny"},
             }
             files["kiro/agents/independent-reviewer.json"] = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode()
-            hooks = {"hooks": [{"name": "harness-policy-preflight-v1", "trigger": "AgentSpawn", "command": "~/.config/agents/governance/python3 ~/.config/agents/governance/policy-preflight.py --provider kiro --managed-fragment harness-policy-preflight-v1 && ~/.config/agents/governance/python3 ~/.config/agents/governance/task-lifecycle.py start"}, {"name": "harness-operation-policy-v1", "trigger": "PreToolUse", "matcher": "execute_bash|execute_pwsh", "command": "bash ~/.config/agents/governance/pre-tool-gate.sh --provider kiro --profile default-allow-operations-v1 --managed-fragment harness-operation-policy-v1"}, {"name": "harness-path-invariants-v1", "trigger": "PreToolUse", "matcher": "fs_read|fs_write|fs_append|str_replace|delete_file", "command": "bash ~/.config/agents/governance/path-guard.sh --managed-fragment harness-path-invariants-v1"}, {"trigger": "PostToolUse", "matcher": "execute_bash|fs_write", "command": "bash ~/.config/agents/governance/retry-hook.sh post"}, {"trigger": "Stop", "command": "bash ~/.config/agents/governance/kiro-stop.sh"}]}
+            hooks = {"hooks": [{"name": "harness-policy-preflight-v1", "trigger": "AgentSpawn", "command": "~/.config/agents/governance/python3 ~/.config/agents/governance/policy-runtime.py startup --provider kiro --surface cli --managed-fragment harness-policy-preflight-v1; ~/.config/agents/governance/python3 ~/.config/agents/governance/task-lifecycle.py start"}, {"name": "harness-operation-policy-v1", "trigger": "PreToolUse", "matcher": "execute_bash|execute_pwsh", "command": "~/.config/agents/governance/python3 ~/.config/agents/governance/policy-runtime.py pretool --provider kiro --surface cli --profile default-allow-operations-v1 --managed-fragment harness-operation-policy-v1"}, {"name": "harness-path-invariants-v1", "trigger": "PreToolUse", "matcher": "fs_read|fs_write|fs_append|str_replace|delete_file", "command": "~/.config/agents/governance/python3 ~/.config/agents/governance/policy-runtime.py pretool --provider kiro --surface cli --profile default-allow-operations-v1 --managed-fragment harness-path-invariants-v1"}, {"trigger": "PostToolUse", "matcher": "execute_bash|fs_write", "command": "bash ~/.config/agents/governance/retry-hook.sh post"}, {"trigger": "Stop", "command": "bash ~/.config/agents/governance/kiro-stop.sh"}]}
             files["kiro/hooks/engineering-governance.json"] = (json.dumps(hooks, indent=2, sort_keys=True) + "\n").encode()
     if "codex/config.toml" in files:
         files["codex/config.toml"] = files["codex/config.toml"].replace(
             b"python3 ~/.config/agents/governance/task-lifecycle.py start",
-            b"~/.config/agents/governance/python3 ~/.config/agents/governance/policy-preflight.py --provider codex --managed-fragment harness-policy-preflight-v1 && ~/.config/agents/governance/python3 ~/.config/agents/governance/task-lifecycle.py start",
+            b"~/.config/agents/governance/python3 ~/.config/agents/governance/policy-runtime.py startup --provider codex --surface cli --managed-fragment harness-policy-preflight-v1; ~/.config/agents/governance/python3 ~/.config/agents/governance/task-lifecycle.py start",
         )
         files["codex/config.toml"] = files["codex/config.toml"].replace(
             b'task-lifecycle.py stop"', b'task-lifecycle.py stop >/dev/null"'
@@ -133,8 +133,7 @@ Review independently and return structured findings. Never mutate files.
         name: CAPABILITIES[name] | {
             "operation_policy": {
                 "profile": "default-allow-operations-v1",
-                "hook_porter": "supported" if name in {"codex", "claude", "gemini", "kiro"} else "unsupported",
-                "activation": "PENDING_PREFLIGHT" if name in {"codex", "claude", "gemini", "kiro"} else "DEGRADED",
+                "hook_porter": "implemented",
             },
         }
         for name in config["providers"]

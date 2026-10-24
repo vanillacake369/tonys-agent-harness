@@ -37,6 +37,7 @@ in {
     ".config/agents/governance/operation_policy.py".source = ../../runtime/governance/operation_policy.py;
     ".config/agents/governance/policy-feedback.py".source = ../../runtime/governance/policy-feedback.py;
     ".config/agents/governance/policy-preflight.py".source = ../../runtime/governance/policy-preflight.py;
+    ".config/agents/governance/policy-runtime.py".source = ../../runtime/governance/policy-runtime.py;
     ".config/agents/governance/managed-config-sync.py".source = ../../runtime/governance/managed-config-sync.py;
   };
 }

@@ -136,7 +136,7 @@ def validate_policy(data: dict) -> None:
         raise HarnessError("provider values must be booleans")
     unknown = set(providers) - set(PROVIDERS)
     if unknown:
-        raise HarnessError(f"unknown providers: {', '.join(sorted(unknown))}")
+        raise HarnessError(f"UNKNOWN_PROVIDER: {', '.join(sorted(unknown))}")
     operations = data.get("operations", {})
     if not isinstance(operations, dict) or set(operations) - {"profile"}:
         raise HarnessError("operations must contain only profile")
