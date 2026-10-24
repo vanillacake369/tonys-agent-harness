@@ -1,6 +1,9 @@
 # 활성 agent provider가 공유해서 쓰는 hook script를 배치한다.
-{
+{lib, pkgs, ...}: let
+  policyPython = pkgs.python3.withPackages (ps: [ps.tomli-w]);
+in {
   home.file = {
+    ".config/agents/governance/python3".source = lib.getExe policyPython;
     ".config/agents/hooks/agent-notify.sh".source = ./providers/claude/hooks/agent-notify.sh;
     ".config/agents/hooks/agent-notify-open.sh".source = ./providers/claude/hooks/agent-notify-open.sh;
     ".config/agents/orchestrator/route.sh".source = ../../runtime/orchestrator/route.sh;

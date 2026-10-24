@@ -82,7 +82,7 @@ class DefaultAllowOperationTests(unittest.TestCase):
         for provider, path in {"claude": "claude/settings.json", "gemini": "gemini/settings.json", "kiro": "kiro/hooks/engineering-governance.json"}.items():
             self.assertIn(f"--provider {provider} --profile default-allow-operations-v1", files[path].decode())
         for path in ("codex/config.toml", "claude/settings.json", "gemini/settings.json", "kiro/hooks/engineering-governance.json"):
-            self.assertIn("~/.nix-profile/bin/python3", files[path].decode())
+            self.assertIn("~/.config/agents/governance/python3", files[path].decode())
 
     def test_generated_native_hook_shapes_pass_structural_preflight(self):
         data = {"schema_version": 1, "preset": "regulated", "providers": {p: True for p in ("codex", "claude", "gemini", "kiro")}, "operations": {"profile": "default-allow-operations-v1"}}

@@ -35,7 +35,7 @@ in {
         hooks = [
           {
             type = "command";
-            command = "~/.nix-profile/bin/python3 ~/.config/agents/governance/policy-preflight.py --provider gemini --managed-fragment harness-policy-preflight-v1 && ~/.nix-profile/bin/python3 ~/.config/agents/governance/task-lifecycle.py start";
+            command = "~/.config/agents/governance/python3 ~/.config/agents/governance/policy-preflight.py --provider gemini --managed-fragment harness-policy-preflight-v1 && ~/.config/agents/governance/python3 ~/.config/agents/governance/task-lifecycle.py start";
             timeout = 10000;
           }
         ];
