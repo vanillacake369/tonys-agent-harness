@@ -1,0 +1,48 @@
+{
+  "budget_ms": 100,
+  "host": {
+    "machine": "arm64",
+    "python": "3.14.7",
+    "system": "Darwin"
+  },
+  "pass": true,
+  "paths": {
+    "cached_enforced": {
+      "max_ms": 52.49,
+      "median_ms": 46.194,
+      "p95_ms": 50.045,
+      "pass": true,
+      "samples": 200
+    },
+    "deny": {
+      "max_ms": 126.107,
+      "median_ms": 75.821,
+      "p95_ms": 96.753,
+      "pass": true,
+      "samples": 200
+    },
+    "failed_after_cooldown": {
+      "max_ms": 53.389,
+      "median_ms": 47.07,
+      "p95_ms": 50.838,
+      "pass": true,
+      "samples": 200
+    },
+    "failed_inside_cooldown": {
+      "max_ms": 120.203,
+      "median_ms": 75.19,
+      "p95_ms": 95.114,
+      "pass": true,
+      "samples": 200
+    },
+    "full_preflight": {
+      "max_ms": 53.734,
+      "median_ms": 46.823,
+      "p95_ms": 50.307,
+      "pass": true,
+      "samples": 200
+    }
+  },
+  "reference_host": true,
+  "schema_version": 1
+}
