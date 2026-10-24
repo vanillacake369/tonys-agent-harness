@@ -33,6 +33,9 @@ link = ".agent-context/team-guides"\n\
 [providers]\n\
 {provider_lines}\n\
 \n\
+[operations]\n\
+profile = "default-allow-operations-v1"\n\
+\n\
 [workflow]\n\
 public_commands = ["cmd-mid-work-ljh", "cmd-mid-comment-ljh", "cmd-post-blog-ljh", "cmd-post-handoff-ljh", "cmd-post-ship-ljh", "cmd-post-commit-ljh"]\n\
 roles = [{roles}]\n\
@@ -134,6 +137,11 @@ def validate_policy(data: dict) -> None:
     unknown = set(providers) - set(PROVIDERS)
     if unknown:
         raise HarnessError(f"unknown providers: {', '.join(sorted(unknown))}")
+    operations = data.get("operations", {})
+    if not isinstance(operations, dict) or set(operations) - {"profile"}:
+        raise HarnessError("operations must contain only profile")
+    if operations.get("profile", "default-allow-operations-v1") != "default-allow-operations-v1":
+        raise HarnessError("unsupported operations.profile")
 
 
 def instruction_content(project: Path, config: dict) -> bytes:

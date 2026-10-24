@@ -27,7 +27,7 @@ if [[ "$normalized_file" =~ (^|[[:space:]/])\.env([.[:space:]/]|$) || "$normaliz
   echo "blocked: sensitive path or credential material is not accessible ($tool_name)" >&2
   exit 2
 fi
-if [[ "$command" =~ (rm[[:space:]]+-rf[[:space:]]+(/|\$HOME|~)|git[[:space:]]+push[[:space:]]+.*--force|curl[^|]*\|[[:space:]]*(sh|bash)|git[[:space:]]+reset[[:space:]]+--hard) ]]; then
+if [[ "$command" =~ (rm[[:space:]]+-rf[[:space:]]+(/|\$HOME|~)|git[[:space:]]+push[[:space:]]+.*--force|curl[^|]*\|[[:space:]]*(sh|bash)) ]]; then
   echo "blocked: dangerous command requires deterministic policy review" >&2
   exit 2
 fi

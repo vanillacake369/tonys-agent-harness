@@ -30,5 +30,10 @@
     ".config/agents/governance/retry-hook.sh".source = ../../runtime/governance/retry-hook.sh;
     ".config/agents/governance/kiro-stop.sh".source = ../../runtime/governance/kiro-stop.sh;
     ".config/agents/governance/pre-tool-gate.sh".source = ../../runtime/governance/pre-tool-gate.sh;
+    ".config/agents/governance/execution-gate.py".source = ../../runtime/governance/execution-gate.py;
+    ".config/agents/governance/operation_policy.py".source = ../../runtime/governance/operation_policy.py;
+    ".config/agents/governance/policy-feedback.py".source = ../../runtime/governance/policy-feedback.py;
+    ".config/agents/governance/policy-preflight.py".source = ../../runtime/governance/policy-preflight.py;
+    ".config/agents/governance/managed-config-sync.py".source = ../../runtime/governance/managed-config-sync.py;
   };
 }

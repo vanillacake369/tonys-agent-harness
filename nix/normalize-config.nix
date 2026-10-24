@@ -11,6 +11,7 @@
   project = manifest.project or {};
   guides = project.guides or {};
   approval = manifest.approval or {};
+  operations = manifest.operations or {};
 in {
   schema_version = 1;
   inherit (manifest) preset;
@@ -24,6 +25,9 @@ in {
     };
   };
   providers = lib.filter (name: configured.${name} or (builtins.elem name preset.providers)) providerOrder;
+  operations = {
+    profile = operations.profile or "default-allow-operations-v1";
+  };
   workflow = manifest.workflow or {};
   permissions = {
     secret_access = "deny";

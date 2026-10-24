@@ -71,6 +71,9 @@ def normalized(data: dict) -> dict:
             },
         },
         "providers": providers,
+        "operations": {
+            "profile": data.get("operations", {}).get("profile", "default-allow-operations-v1"),
+        },
         "workflow": data.get("workflow", {}),
         "permissions": {
             "secret_access": "deny", "reviewer_write": False,

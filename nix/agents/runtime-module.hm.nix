@@ -6,6 +6,8 @@
     ./runtime-secrets.hm.nix
     ./runtime-hooks.nix
     ./providers/codex/module.nix
+    ./providers/claude/module.nix
+    ./providers/gemini/module.nix
     ./providers/kiro/module.nix
   ];
 }
