@@ -13,3 +13,7 @@ result
 result-*
 target/
 .DS_Store
+.codex/logs/
+.codex/*.started
+.codex/impl-orchestration.txt
+.codex/reserve-*
