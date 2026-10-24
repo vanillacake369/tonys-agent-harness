@@ -1,8 +1,9 @@
 # TODO and Pseudocode: Operation Activation Reconcile v2
 
-Status: Implemented and independently reviewed; final repository-wide check is
-blocked by two preserved superseded assertions (2026-10-24). See the
-[execution report](default-allow-operations-reconcile-v2-execution.md).
+Status: Phases 0-5 implemented and repository-wide verification passed
+(2026-10-24). Phase 6 was skipped because the Python SLO passed. Phase 7
+publication and downstream consumption remain pending. See the [execution
+report](default-allow-operations-reconcile-v2-execution.md).
 
 Inputs:
 
@@ -17,7 +18,8 @@ rollback, concurrency persistence, and five-path performance traceability.
 
 ## Acceptance traceability
 
-All evidence paths are planned until implementation runs the stated checks.
+The planned evidence paths below were exercised and are recorded in the linked
+execution report and benchmark artifact.
 
 | PRD acceptance | Requirements | Planned verification | Planned evidence |
 | --- | --- | --- | --- |
@@ -39,28 +41,28 @@ All evidence paths are planned until implementation runs the stated checks.
 - [x] Add DAOR2 requirement rows to `docs/agent/traceability.tsv`.
 - [x] Replace v1 activation wording in the authoritative specification with the
       accepted single state machine and PreTool latch.
-- [ ] Freeze stable state, error, reason, fragment, and telemetry identifiers.
+- [x] Freeze stable state, error, reason, fragment, and telemetry identifiers.
 - [x] Map every PRD acceptance criterion to its planned test and evidence row;
       implementation cannot begin while any mapping is absent.
-- [ ] Freeze provider/version/surface fixtures without contacting providers.
-- [ ] Add characterization fixtures for `curl | sh` ALLOW and hook-removal
+- [x] Freeze provider/version/surface fixtures without contacting providers.
+- [x] Add characterization fixtures for `curl | sh` ALLOW and hook-removal
       residual-risk reporting.
-- [ ] Record unrelated worktree changes and keep them outside task commits.
+- [x] Record unrelated worktree changes and keep them outside task commits.
 
 Exit: documents and fixtures agree; no unresolved decision is hidden in code.
 
 ## Phase 1 — Unified decision and feedback contract
 
-- [ ] Express sensitive-path and catastrophic-destruction results as the same
+- [x] Express sensitive-path and catastrophic-destruction results as the same
       typed decision returned by the command classifier.
-- [ ] Remove the standalone `curl | sh` guard.
-- [ ] Route every DENY through one feedback adapter.
-- [ ] Redact raw input for secret/credential reason families and whenever early
+- [x] Remove the standalone `curl | sh` guard.
+- [x] Route every DENY through one feedback adapter.
+- [x] Redact raw input for secret/credential reason families and whenever early
       payload normalization marks the request privacy-tainted.
-- [ ] Preserve 60-second notification deduplication and privacy-safe telemetry.
-- [ ] Make telemetry append and dedupe updates concurrency-safe and define
+- [x] Preserve 60-second notification deduplication and privacy-safe telemetry.
+- [x] Make telemetry append and dedupe updates concurrency-safe and define
       corrupt-state recovery without changing a DENY decision.
-- [ ] Add paired allow/deny/redaction tests before implementation changes.
+- [x] Add paired allow/deny/redaction tests before implementation changes.
 
 Pseudocode:
 
@@ -89,19 +91,19 @@ echo raw input.
 
 ## Phase 2 — State machine and fingerprint
 
-- [ ] Implement `PENDING`, `ENFORCED`, `FAILED`, `UNAVAILABLE`, and
+- [x] Implement `PENDING`, `ENFORCED`, `FAILED`, `UNAVAILABLE`, and
       `UNSUPPORTED` as the only persisted states.
-- [ ] Return `UNKNOWN_PROVIDER` during manifest validation and remove operation-
+- [x] Return `UNKNOWN_PROVIDER` during manifest validation and remove operation-
       policy `DEGRADED` metadata/tests.
-- [ ] Define canonical serialization for the scoped activation fingerprint.
-- [ ] Ignore unrelated provider-native settings in the fingerprint.
-- [ ] Bind state to provider, surface, version, policy revision, runtime
+- [x] Define canonical serialization for the scoped activation fingerprint.
+- [x] Ignore unrelated provider-native settings in the fingerprint.
+- [x] Bind state to provider, surface, version, policy revision, runtime
       identity, and managed fragment digest.
-- [ ] Define runtime identity so replacement at the same executable path
+- [x] Define runtime identity so replacement at the same executable path
       invalidates cached version and enforcement state.
-- [ ] Version the activation-state schema independently from policy revision;
+- [x] Version the activation-state schema independently from policy revision;
       reject unknown schemas.
-- [ ] Write corrupt-state and stale-fingerprint fail-closed tests.
+- [x] Write corrupt-state and stale-fingerprint fail-closed tests.
 
 Pseudocode:
 
@@ -147,31 +149,31 @@ matching `ENFORCED` record.
 
 ## Phase 3 — Activation latch, locking, and recovery
 
-- [ ] Make startup preflight advisory: diagnose, persist non-ENFORCED evidence,
+- [x] Make startup preflight advisory: diagnose, persist non-ENFORCED evidence,
       and notify, but never establish `ENFORCED`.
-- [ ] Add a blocking latch before classification for every covered PreTool
+- [x] Add a blocking latch before classification for every covered PreTool
       surface.
-- [ ] Use a lock-free cached `ENFORCED` path when the fingerprint matches.
-- [ ] Acquire a bounded provider+profile lock only for transitions.
-- [ ] Persist transitions with private temp file, flush/fsync, atomic replace,
+- [x] Use a lock-free cached `ENFORCED` path when the fingerprint matches.
+- [x] Acquire a bounded provider+profile lock only for transitions.
+- [x] Persist transitions with private temp file, flush/fsync, atomic replace,
       and parent-directory durability where supported.
-- [ ] Use a mode-0700 state directory, mode-0600 records, and no-follow/lstat
+- [x] Use a mode-0700 state directory, mode-0600 records, and no-follow/lstat
       protections where supported.
-- [ ] Apply the scoped lock and atomic schema to activation, doctor, startup,
+- [x] Apply the scoped lock and atomic schema to activation, doctor, startup,
       and live-hook writers, not only PreTool transitions.
-- [ ] Fail closed on lock timeout or malformed state.
-- [ ] Revalidate immediately after fingerprint change.
-- [ ] Revalidate unchanged `FAILED` state only on the next PreTool call after
+- [x] Fail closed on lock timeout or malformed state.
+- [x] Revalidate immediately after fingerprint change.
+- [x] Revalidate unchanged `FAILED` state only on the next PreTool call after
       the five-second cooldown.
-- [ ] Add parallel-process transition tests and deterministic fake-clock tests.
-- [ ] Freeze full local preflight as: state/schema/mode validation, runtime
+- [x] Add parallel-process transition tests and deterministic fake-clock tests.
+- [x] Freeze full local preflight as: state/schema/mode validation, runtime
       identity and cached-version validation, native managed-fragment structural
       validation, required runtime readability/executability, and canonical
       fingerprint recomputation. It must not invoke a provider tool or network.
-- [ ] Require activation/doctor to refresh provider version/surface evidence
+- [x] Require activation/doctor to refresh provider version/surface evidence
       when runtime identity changes. PreTool fails closed as `UNSUPPORTED` when
       that refreshed evidence is absent; it never executes the provider binary.
-- [ ] Assign bounded deadlines to lock acquisition, notifier dispatch, and any
+- [x] Assign bounded deadlines to lock acquisition, notifier dispatch, and any
       subprocess adapter; record them in fixtures before performance testing.
 
 Pseudocode:
@@ -220,32 +222,32 @@ validation, and concurrent callers cannot publish contradictory state.
 
 ## Phase 4 — Single-process Python hot path
 
-- [ ] Replace the Bash/JQ/Python fan-out with one Nix-pinned Python entry point.
-- [ ] Keep provider hook commands as thin transport adapters only where native
+- [x] Replace the Bash/JQ/Python fan-out with one Nix-pinned Python entry point.
+- [x] Keep provider hook commands as thin transport adapters only where native
       payload normalization requires them.
-- [ ] Keep exporter, rendering, managed sync, backup, and rollback outside the
+- [x] Keep exporter, rendering, managed sync, backup, and rollback outside the
       hot-path module.
-- [ ] Ensure every provider invokes the same authority with provider/surface
+- [x] Ensure every provider invokes the same authority with provider/surface
       parameters.
-- [ ] Preserve provider-specific timeout units and blocking response shapes.
+- [x] Preserve provider-specific timeout units and blocking response shapes.
 
 Exit: one Python process owns latch, classification, state, and feedback for a
 tool event; no alternate script can make a competing final decision.
 
 ## Phase 5 — Performance and provider verification
 
-- [ ] Record the formal current-path benchmark.
-- [ ] Measure cached ENFORCED, full preflight, DENY, FAILED inside cooldown, and
+- [x] Record the formal current-path benchmark.
+- [x] Measure cached ENFORCED, full preflight, DENY, FAILED inside cooldown, and
       FAILED after cooldown p95 as five separate distributions.
-- [ ] Require p95 <= 100 ms on the current aarch64-darwin Nix reference host;
+- [x] Require p95 <= 100 ms on the current aarch64-darwin Nix reference host;
       report identical fixtures informationally on other supported systems.
-- [ ] Run focused unit tests, all Python tests, Bats hooks, Rust tests, Nix
+- [x] Run focused unit tests, all Python tests, Bats hooks, Rust tests, Nix
       parser/checks, `just check`, and full `nix flake check` where compatible.
-- [ ] Run structural fixtures for all providers and native smoke for installed
+- [x] Run structural fixtures for all providers and native smoke for installed
       provider surfaces without real external mutation.
-- [ ] Run doctor/conformance with a deliberately missing managed hook and prove
+- [x] Run doctor/conformance with a deliberately missing managed hook and prove
       truthful residual-risk reporting.
-- [ ] Replace a provider executable fixture at the same path and prove runtime
+- [x] Replace a provider executable fixture at the same path and prove runtime
       identity invalidates the cached version/fingerprint.
 
 Exit: correctness and performance acceptance pass with recorded evidence.
@@ -266,10 +268,10 @@ Rust authority owns the migrated use case.
 
 ## Phase 7 — Review, rollout, and downstream consumption
 
-- [ ] Independent review checks privacy, state transitions, concurrency,
+- [x] Independent review checks privacy, state transitions, concurrency,
       performance evidence, provider parity, rollback, and traceability.
-- [ ] Repair findings and repeat targeted then full verification.
-- [ ] Update the execution log with commands, results, and residual risks.
+- [x] Repair findings and repeat targeted then full verification.
+- [x] Update the execution log with commands, results, and residual risks.
 - [ ] Run the repository post-commit workflow.
 - [ ] Commit responsibilities in coherent groups, publish the harness, update
       `tonys-nix` to the published revision, validate, commit, and publish it.

@@ -338,7 +338,7 @@ def _feedback_lock(root: Path):
     return transition_lock(root, "feedback", PROFILE, timeout=0.075)
 
 
-def feedback(root: Path, provider: str, surface: str, decision: RuntimeDecision, raw: str, tainted: bool, now: int) -> str:
+def feedback(root: Path, provider: str, surface: str, decision: RuntimeDecision, raw: str, tainted: bool, now: int, fingerprint: str | None = None) -> str:
     digest = hashlib.sha256(raw.encode()).hexdigest()
     event = {
         "timestamp": now,
@@ -347,6 +347,7 @@ def feedback(root: Path, provider: str, surface: str, decision: RuntimeDecision,
         "family": decision.family,
         "reason_id": decision.reason_id,
         "policy_revision": POLICY_REVISION,
+        "fingerprint": fingerprint,
         "command_hash": digest,
     }
     should_notify = False
@@ -422,8 +423,8 @@ def validate_porter(provider: str, surface: str, version: str) -> None:
         raise ValueError("unsupported provider version or surface")
 
 
-def _denied(root: Path, provider: str, surface: str, reason: str, raw: str, tainted: bool, now: int, family: str = "activation") -> int:
-    message = feedback(root, provider, surface, RuntimeDecision("DENY", family, reason, tainted), raw, tainted, now)
+def _denied(root: Path, provider: str, surface: str, reason: str, raw: str, tainted: bool, now: int, family: str = "activation", fingerprint: str | None = None) -> int:
+    message = feedback(root, provider, surface, RuntimeDecision("DENY", family, reason, tainted), raw, tainted, now, fingerprint)
     print(message, file=sys.stderr)
     return 2
 
@@ -468,6 +469,15 @@ def pretool(args, root: Path, path: Path, config: Path, executable: Path, now: i
     if not state or not state.get("provider_version") or not state.get("runtime_identity"):
         return _denied(root, args.provider, args.surface, "provider_unsupported", raw, tainted, now)
     try:
+        validate_porter(args.provider, args.surface, state["provider_version"])
+    except ValueError:
+        try:
+            with transition_lock(root, args.provider, args.profile):
+                write_state(path, args.provider, args.surface, "UNSUPPORTED", None, now, "provider_unsupported")
+        except (OSError, TimeoutError):
+            return _denied(root, args.provider, args.surface, "activation_lock_timeout", raw, tainted, now)
+        return _denied(root, args.provider, args.surface, "provider_unsupported", raw, tainted, now)
+    try:
         observation = observe(args.provider, args.surface, config, executable, state["provider_version"])
     except (OSError, ValueError, json.JSONDecodeError, tomllib.TOMLDecodeError):
         observation = None
@@ -475,12 +485,12 @@ def pretool(args, root: Path, path: Path, config: Path, executable: Path, now: i
         decision = decide(command, file_path)
         if decision.decision == "ALLOW":
             return 0
-        print(feedback(root, args.provider, args.surface, decision, raw, tainted, now), file=sys.stderr)
+        print(feedback(root, args.provider, args.surface, decision, raw, tainted, now, observation.fingerprint), file=sys.stderr)
         return 2
     if state.get("status") == "UNSUPPORTED" and observation and state.get("fingerprint") == observation.fingerprint:
-        return _denied(root, args.provider, args.surface, "provider_unsupported", raw, tainted, now)
+        return _denied(root, args.provider, args.surface, "provider_unsupported", raw, tainted, now, fingerprint=observation.fingerprint)
     if state.get("status") == "FAILED" and now < int(state.get("retry_after") or 0) and (observation is None or state.get("fingerprint") == observation.fingerprint):
-        return _denied(root, args.provider, args.surface, "activation_cooldown", raw, tainted, now)
+        return _denied(root, args.provider, args.surface, "activation_cooldown", raw, tainted, now, fingerprint=state.get("fingerprint"))
     try:
         with transition_lock(root, args.provider, args.profile):
             current = read_state(path)
@@ -490,20 +500,20 @@ def pretool(args, root: Path, path: Path, config: Path, executable: Path, now: i
                 observation = observe(args.provider, args.surface, config, executable, current["provider_version"])
             except (OSError, ValueError, json.JSONDecodeError, tomllib.TOMLDecodeError):
                 write_state(path, args.provider, args.surface, "FAILED", observation_from_state(current), now, "activation_failed", now + 5)
-                return _denied(root, args.provider, args.surface, "activation_failed", raw, tainted, now)
+                return _denied(root, args.provider, args.surface, "activation_failed", raw, tainted, now, fingerprint=current.get("fingerprint"))
             if current.get("runtime_identity") != observation.runtime_identity:
                 write_state(path, args.provider, args.surface, "UNSUPPORTED", observation, now, "provider_unsupported")
-                return _denied(root, args.provider, args.surface, "provider_unsupported", raw, tainted, now)
+                return _denied(root, args.provider, args.surface, "provider_unsupported", raw, tainted, now, fingerprint=observation.fingerprint)
             if os.environ.get("AGENT_POLICY_FORCE_PREFLIGHT_FAILURE") == "1":
                 write_state(path, args.provider, args.surface, "FAILED", observation, now, "activation_failed", now + 5)
-                return _denied(root, args.provider, args.surface, "activation_failed", raw, tainted, now)
+                return _denied(root, args.provider, args.surface, "activation_failed", raw, tainted, now, fingerprint=observation.fingerprint)
             write_state(path, args.provider, args.surface, "ENFORCED", observation, now)
     except (OSError, TimeoutError):
-        return _denied(root, args.provider, args.surface, "activation_lock_timeout", raw, tainted, now)
+        return _denied(root, args.provider, args.surface, "activation_lock_timeout", raw, tainted, now, fingerprint=observation.fingerprint if observation else state.get("fingerprint"))
     decision = decide(command, file_path)
     if decision.decision == "ALLOW":
         return 0
-    print(feedback(root, args.provider, args.surface, decision, raw, tainted, now), file=sys.stderr)
+    print(feedback(root, args.provider, args.surface, decision, raw, tainted, now, observation.fingerprint), file=sys.stderr)
     return 2
 
 

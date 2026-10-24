@@ -2,8 +2,8 @@
 
 Date: 2026-10-24
 
-Status: implementation complete; repository-wide acceptance is blocked only by
-two superseded assertions in a preserved user-owned test file.
+Status: implementation and repository-wide verification complete. Downstream
+publication and `tonys-nix` revision consumption remain pending.
 
 ## Changes made
 
@@ -25,12 +25,8 @@ two superseded assertions in a preserved user-owned test file.
 
 | Command | Result |
 | --- | --- |
-| `python3 -m unittest discover -s tests -v` | PASS, 73 tests |
-| Bats suites excluding preserved `harness-remediation.bats` | PASS, 85 tests |
-| `cargo test --workspace` | PASS, 26 tests |
-| `nix flake check --no-build` | PASS on aarch64-darwin |
+| `nix flake check` | PASS on aarch64-darwin; pinned Python 75 tests, Bats 131 tests, Rust 26 tests, and Nix contracts |
 | `python3 tests/benchmarks/operation-policy.py --samples 200 ...` | PASS, all five p95 distributions <= 100 ms |
-| full `bats tests/hooks/*.bats` | 129 PASS, 2 stale assertion failures |
 
 The formal benchmark is
 [recorded as JSON](default-allow-operations-reconcile-v2-benchmark.json). It
@@ -43,19 +39,23 @@ FAILED after cooldown.
 
 Three read-only reviews initially blocked release on structural fingerprinting,
 version/surface compatibility, Kiro discovery, and competing Claude deny hooks.
-All four findings were repaired and covered by focused tests. Review also
-confirmed that the two remaining Bats failures are obsolete v1 assertions, not
-product regressions:
+All four findings were repaired and covered by focused tests. The obsolete v1
+assertions were updated to require the v2 authority:
 
 - a Read hook is expected to contain `path-guard.sh`, although v2 requires
   `policy-runtime.py`;
 - Codex is expected to contain `pre-tool-gate.sh`, although v2 requires
   `policy-runtime.py`.
 
-The assertions live in `tests/hooks/harness-remediation.bats`, which already
-contains unrelated user-owned schema-v2 work and was deliberately not edited.
+A final read-only mid-review then found direct-PreTool surface validation,
+mutable legacy-guard migration, applicable telemetry fingerprints, and stale
+evidence gaps. The implementation now validates the requested surface at the
+blocking edge, migrates only exact legacy harness guard commands, records the
+current fingerprint on classified denials, and covers each correction with a
+regression test. The two assertion lines were staged independently from the
+unrelated user-owned schema-v2 work in the same file.
 
-## Residual risks and blockers
+## Residual risks
 
 - Native hook deletion remains undetectable by the deleted hook itself. Doctor
   and subsequent activation report the missing managed structure truthfully.
@@ -64,5 +64,7 @@ contains unrelated user-owned schema-v2 work and was deliberately not edited.
 - Native Codex filesystem permission denials cannot be routed through the hook
   feedback adapter when the provider does not emit a blocking file-tool event.
   The common runtime covers every configured blocking hook surface.
-- Full `nix flake check` inherits the two preserved stale Bats assertions. The
-  product, Python, Rust, structural Nix, and all other Bats checks pass.
+- Direct `/usr/bin/python3` on the reference macOS host is Python 3.9 and lacks
+  `tomllib`; authoritative verification therefore runs through the pinned Nix
+  check rather than claiming a host-Python or `just check` pass.
+- Linux outputs were evaluated but not executed on the aarch64-darwin host.

@@ -81,7 +81,7 @@ JSON
 }
 
 @test "file guard is before execution and no longer after execution" {
-  run jq -e '[.hooks.PreToolUse[] | select(.matcher == "Read|Write|Edit|NotebookEdit") | .hooks[].command | contains("path-guard.sh")] | any' "$ROOT/nix/agents/providers/claude/settings.json"
+  run jq -e '[.hooks.PreToolUse[] | select(.matcher == "Read|Write|Edit|NotebookEdit") | .hooks[].command | contains("policy-runtime.py pretool --provider claude")] | any' "$ROOT/nix/agents/providers/claude/settings.json"
   [ "$status" -eq 0 ]
   run jq -e '[.hooks.PostToolUse[].hooks[].command | contains("path-guard.sh")] | any | not' "$ROOT/nix/agents/providers/claude/settings.json"
   [ "$status" -eq 0 ]
@@ -482,7 +482,7 @@ JSON
   run rg -n 'SessionStart|task-lifecycle.py start|task-lifecycle.py stop' "$ROOT/nix/agents/providers/codex/render.nix"
   [ "$status" -eq 0 ]
   [[ "$output" == *'SessionStart'* && "$output" == *'task-lifecycle.py start'* && "$output" == *'task-lifecycle.py stop >/dev/null'* ]]
-  run rg -n 'pre-tool-gate.sh' "$ROOT/nix/agents/providers/codex/render.nix"
+  run rg -n 'policy-runtime.py pretool --provider codex' "$ROOT/nix/agents/providers/codex/render.nix"
   [ "$status" -eq 0 ]
   run rg -n 'BeforeAgent|AfterAgent|task-lifecycle.py start|task-lifecycle.py stop' "$ROOT/nix/agents/providers/gemini/render.nix"
   [ "$status" -eq 0 ]
@@ -522,6 +522,26 @@ JSON
   [ "$status" -eq 0 ]
   run jq -e '.status == "COMPLETE_WITH_EXPLICIT_GAPS" and ([.providers[] | select(.status == "UNAVAILABLE")] | length == 4) and ([.providers[] | select(.status | test("VERIFIED$"))] | length == 0)' "$report"
   [ "$status" -eq 0 ]
+  run jq -e '
+    .schema_version == 2
+    and ([.providers[].provider] | sort) == ["claude", "codex", "gemini", "kiro"]
+    and all(.providers[];
+      .dynamic_permissions.provider_version == "unknown"
+      and .dynamic_permissions.adapter.apply == "NOT_IMPLEMENTED"
+      and .dynamic_permissions.adapter.revoke == "NOT_IMPLEMENTED"
+      and .dynamic_permissions.adapter.observe == "NOT_IMPLEMENTED"
+      and .dynamic_permissions.adapter.evidence_kind == "adapter-inventory"
+      and (.dynamic_permissions.adapter.evidence_ref | type == "string" and length > 0)
+      and .dynamic_permissions.native.apply == "UNAVAILABLE"
+      and .dynamic_permissions.native.revoke == "UNAVAILABLE"
+      and .dynamic_permissions.native.observe == "UNAVAILABLE"
+      and .dynamic_permissions.native.evidence_kind == "binary-discovery"
+      and (.dynamic_permissions.native.evidence_ref | type == "string" and length > 0)
+      and .dynamic_permissions.enforcement == "UNENFORCEABLE"
+      and (.dynamic_permissions.reason | type == "string" and length > 0)
+    )
+  ' "$report"
+  [ "$status" -eq 0 ]
 }
 
 @test "native conformance does not mistake Codex startup failure for sandbox denial" {
@@ -536,6 +556,14 @@ SH
   run env AGENT_PROVIDER_PATH="$bindir" bash "$GOV/provider-native-conformance.sh" --output "$report" --repo "$ROOT"
   [ "$status" -eq 2 ]
   run jq -e '.providers[] | select(.provider == "codex") | .status == "FAILED" and (.evidence | contains("startup")) and .command_result == "harmless=2"' "$report"
+  [ "$status" -eq 0 ]
+  run jq -e '.providers[] | select(.provider == "codex") |
+    .dynamic_permissions.provider_version == "codex-fixture 1"
+    and .dynamic_permissions.adapter.apply == "NOT_IMPLEMENTED"
+    and .dynamic_permissions.native.observe == "UNVERIFIED"
+    and .dynamic_permissions.native.evidence_kind == "not-probed"
+    and .dynamic_permissions.enforcement == "UNENFORCEABLE"
+  ' "$report"
   [ "$status" -eq 0 ]
 }
 
@@ -558,6 +586,50 @@ SH
     and .generated_digest == $generated
     and .activated_path == $activated
     and (.providers[] | select(.provider == "codex") | .status == "UNAVAILABLE" and .command_result == "harmless=134")
+    and (.providers[] | select(.provider == "codex") |
+      .dynamic_permissions.provider_version == "codex-fixture 134"
+      and .dynamic_permissions.native.apply == "UNVERIFIED"
+      and .dynamic_permissions.native.revoke == "UNVERIFIED"
+      and .dynamic_permissions.native.observe == "UNVERIFIED"
+      and (.dynamic_permissions.native.evidence_ref | contains("provider present"))
+      and (.dynamic_permissions.native.evidence_ref | contains("not installed") | not))
+  ' "$report"
+  [ "$status" -eq 0 ]
+}
+
+@test "native conformance separates adapter absence from mixed native availability" {
+  generated="$BATS_TEST_TMPDIR/mixed-generated"
+  mkdir -p "$generated/claude" "$generated/gemini"
+  printf '{"source_digest":"%064d"}\n' 0 > "$generated/manifest.json"
+  cp "$ROOT/AGENTS.md" "$generated/claude/AGENTS.md"
+  cp "$ROOT/AGENTS.md" "$generated/gemini/AGENTS.md"
+  bindir="$BATS_TEST_TMPDIR/mixed-bin"
+  mkdir "$bindir"
+  for provider in claude gemini; do
+    printf '#!/usr/bin/env bash\necho "%s-fixture 1"\n' "$provider" > "$bindir/$provider"
+    chmod +x "$bindir/$provider"
+  done
+  report="$BATS_TEST_TMPDIR/native-mixed.json"
+  run env AGENT_PROVIDER_PATH="$bindir" bash "$GOV/provider-native-conformance.sh" \
+    --output "$report" --repo "$ROOT" --generated "$generated"
+  [ "$status" -eq 0 ]
+  run jq -e '
+    ([.providers[] | select(.provider == "claude" or .provider == "gemini") |
+      select(.status == "STATICALLY_VERIFIED"
+        and .dynamic_permissions.native.apply == "UNVERIFIED"
+        and .dynamic_permissions.native.revoke == "UNVERIFIED"
+        and .dynamic_permissions.native.observe == "UNVERIFIED"
+        and .dynamic_permissions.adapter.apply == "NOT_IMPLEMENTED"
+        and .dynamic_permissions.adapter.revoke == "NOT_IMPLEMENTED"
+        and .dynamic_permissions.adapter.observe == "NOT_IMPLEMENTED")] | length) == 2
+    and ([.providers[] | select(.provider == "codex" or .provider == "kiro") |
+      select(.status == "UNAVAILABLE"
+        and .dynamic_permissions.native.apply == "UNAVAILABLE"
+        and .dynamic_permissions.native.revoke == "UNAVAILABLE"
+        and .dynamic_permissions.native.observe == "UNAVAILABLE"
+        and .dynamic_permissions.adapter.apply == "NOT_IMPLEMENTED"
+        and .dynamic_permissions.adapter.revoke == "NOT_IMPLEMENTED"
+        and .dynamic_permissions.adapter.observe == "NOT_IMPLEMENTED")] | length) == 2
   ' "$report"
   [ "$status" -eq 0 ]
 }

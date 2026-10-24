@@ -111,6 +111,24 @@ class DefaultAllowOperationTests(unittest.TestCase):
             self.assertLessEqual(len(list(root.glob("settings.json.backup.*"))), 3)
             self.assertEqual(target.stat().st_mode & 0o777, 0o600)
 
+    def test_managed_sync_removes_only_legacy_harness_guard_entries(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); target = root / "settings.json"; source = root / "desired.json"
+            target.write_text(json.dumps({"hooks": {"PreToolUse": [
+                {"matcher": "Bash", "hooks": [{"command": "~/.claude/hooks/cmd-guard.sh"}]},
+                {"matcher": "Read|Write|Edit|NotebookEdit", "hooks": [{"command": "~/.config/agents/governance/path-guard.sh"}]},
+                {"matcher": "Bash", "hooks": [{"command": "~/.claude/hooks/branch-guard.sh"}]},
+                {"matcher": "Bash", "hooks": [{"command": "/project/cmd-guard.sh"}]},
+                {"matcher": "Bash", "hooks": [{"command": "./cmd-guard.sh-user-wrapper"}]},
+                {"matcher": "Bash", "hooks": [{"command": "user-hook"}]},
+            ]}}))
+            desired_entry = {"matcher": "Bash", "hooks": [{"command": "policy-runtime.py pretool --managed-fragment harness-operation-policy-v1"}]}
+            source.write_text(json.dumps({"hooks": {"PreToolUse": [desired_entry]}}))
+            subprocess.run([sys.executable, str(SYNC), "--format", "json", "--target", str(target), "--source", str(source)], check=True)
+            entries = json.loads(target.read_text())["hooks"]["PreToolUse"]
+            commands = [entry["hooks"][0]["command"] for entry in entries]
+            self.assertEqual(commands, ["/project/cmd-guard.sh", "./cmd-guard.sh-user-wrapper", "user-hook", desired_entry["hooks"][0]["command"]])
+
     def test_managed_kiro_hook_list_preserves_user_entries_and_repairs_by_id(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); target = root / "hooks.json"; source = root / "desired.json"

@@ -26,8 +26,36 @@ if [[ -n "$GENERATED" ]]; then
 fi
 results='[]'
 append() {
+  native_status=UNVERIFIED
+  [[ "$3" == unknown ]] && native_status=UNAVAILABLE
   results=$(jq -c --arg provider "$1" --arg status "$2" --arg version "$3" --arg evidence "$4" --arg command_result "$5" \
-    '. + [{provider:$provider,status:$status,version:$version,evidence:$evidence,command_result:$command_result}]' <<<"$results")
+    --arg native_status "$native_status" \
+    '. + [{
+      provider:$provider,
+      status:$status,
+      version:$version,
+      evidence:$evidence,
+      command_result:$command_result,
+      dynamic_permissions:{
+        provider_version:$version,
+        adapter:{
+          apply:"NOT_IMPLEMENTED",
+          revoke:"NOT_IMPLEMENTED",
+          observe:"NOT_IMPLEMENTED",
+          evidence_kind:"adapter-inventory",
+          evidence_ref:"runtime/governance/provider-native-conformance.sh"
+        },
+        native:{
+          apply:$native_status,
+          revoke:$native_status,
+          observe:$native_status,
+          evidence_kind:(if $native_status == "UNAVAILABLE" then "binary-discovery" else "not-probed" end),
+          evidence_ref:(if $native_status == "UNAVAILABLE" then "provider binary not installed" else ("provider present at " + $version + "; no version-bound native grant probe executed") end)
+        },
+        enforcement:"UNENFORCEABLE",
+        reason:"harness adapter is absent and native grant capability is not proven"
+      }
+    }]' <<<"$results")
 }
 
 codex=$(find_bin codex)
@@ -84,5 +112,5 @@ mkdir -p "$(dirname "$OUTPUT")"; umask 077
 jq -n --arg status "$status" --arg timestamp "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
   --arg source_digest "$source_digest" --arg generated_digest "$generated_digest" --arg activated_path "$activated_path" \
   --argjson providers "$results" \
-  '{schema_version:1,status:$status,timestamp:$timestamp,source_digest:$source_digest,generated_digest:$generated_digest,activated_path:$activated_path,providers:$providers}' > "$OUTPUT"
+  '{schema_version:2,status:$status,timestamp:$timestamp,source_digest:$source_digest,generated_digest:$generated_digest,activated_path:$activated_path,providers:$providers}' > "$OUTPUT"
 [[ "$status" == COMPLETE_WITH_EXPLICIT_GAPS ]] || exit 2

@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """Upsert harness-owned provider fragments into mutable native settings."""
 from __future__ import annotations
-import argparse, json, os, shutil, stat, tempfile, time
+import argparse, json, os, re, shutil, stat, tempfile, time
 from pathlib import Path
 import tomllib
 
 FRAGMENT_IDS = ("harness-operation-policy-v1", "harness-policy-preflight-v1", "harness-path-invariants-v1")
-LEGACY_POLICY_COMMANDS = ("pre-tool-gate.sh", "policy-preflight.py")
+LEGACY_POLICY_COMMANDS = re.compile(
+    r"^(?:(?:bash\s+)?~/\.config/agents/governance/(?:pre-tool-gate\.sh|path-guard\.sh)(?:\s|$)"
+    r"|~/\.config/agents/governance/python3\s+~/\.config/agents/governance/policy-preflight\.py(?:\s|$)"
+    r"|~/\.claude/hooks/(?:cmd-guard\.sh|branch-guard\.sh)(?:\s|$))"
+)
 
 def managed(value) -> bool:
     if isinstance(value, str): return any(fragment_id in value for fragment_id in FRAGMENT_IDS)
@@ -15,7 +19,7 @@ def managed(value) -> bool:
     return False
 
 def legacy_policy(value) -> bool:
-    if isinstance(value, str): return any(command in value for command in LEGACY_POLICY_COMMANDS)
+    if isinstance(value, str): return LEGACY_POLICY_COMMANDS.search(value) is not None
     if isinstance(value, list): return any(legacy_policy(item) for item in value)
     if isinstance(value, dict): return any(legacy_policy(item) for item in value.values())
     return False

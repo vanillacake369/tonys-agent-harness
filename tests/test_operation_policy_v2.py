@@ -126,6 +126,7 @@ class OperationPolicyV2Tests(unittest.TestCase):
                 self.assertIn(reason, denied.stderr)
             events = [json.loads(line) for line in (root / "state/operation-denials.jsonl").read_text().splitlines()]
             self.assertEqual([event["reason_id"] for event in events], list(cases.values()))
+            self.assertTrue(all(len(event["fingerprint"]) == 64 for event in events))
 
     def test_failed_state_retries_only_after_five_seconds(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -140,6 +141,9 @@ class OperationPolicyV2Tests(unittest.TestCase):
             self.assertEqual(first["retry_after"], 105)
             self.assertEqual(self.run_runtime(root, "pretool", payload, now=104, extra_env=forced).returncode, 2)
             self.assertEqual(json.loads(state_path.read_text())["failed_at"], 100)
+            cooldown_event = json.loads((root / "state/operation-denials.jsonl").read_text().splitlines()[-1])
+            self.assertEqual(cooldown_event["reason_id"], "activation_cooldown")
+            self.assertEqual(len(cooldown_event["fingerprint"]), 64)
             self.assertEqual(self.run_runtime(root, "pretool", payload, now=105).returncode, 0)
 
     def test_fingerprint_ignores_unrelated_config_and_detects_runtime_replacement(self):
@@ -264,6 +268,31 @@ class OperationPolicyV2Tests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0)
             self.assertEqual(json.loads(state_path.read_text())["status"], "UNSUPPORTED")
+
+    def test_pretool_rejects_surface_not_validated_by_startup(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.assertEqual(self.run_runtime(root, "startup").returncode, 0)
+            config = root / "config.toml"
+            binary = root / "codex"
+            env = os.environ | {
+                "AGENT_POLICY_STATE_DIR": str(root / "state"),
+                "AGENT_POLICY_CONFIG": str(config),
+                "AGENT_PROVIDER_EXECUTABLE": str(binary),
+                "AGENT_NOTIFY_HOOK": str(root / "absent-notifier"),
+            }
+            result = subprocess.run(
+                [sys.executable, str(RUNTIME), "pretool", "--provider", "codex", "--surface", "future"],
+                input=json.dumps({"tool_name": "Bash", "tool_input": {"command": "git status"}}),
+                text=True,
+                capture_output=True,
+                env=env,
+            )
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("provider_unsupported", result.stderr)
+            state = json.loads(next((root / "state").glob("provider-*.json")).read_text())
+            self.assertEqual(state["status"], "UNSUPPORTED")
+            self.assertEqual(state["surface"], "future")
 
     def test_hook_structure_is_fingerprinted_and_invalid_matcher_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
