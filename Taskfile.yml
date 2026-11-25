@@ -1,0 +1,24 @@
+version: "3"
+
+silent: true
+
+tasks:
+  default:
+    cmds:
+      - task: core
+
+  core:
+    desc: Run the portable core unit, integration, scenario, Nix, and performance checks
+    cmds:
+      - bash dev/environment-run.sh core
+
+  core:perf:
+    desc: Measure the core status scenario with Linux perf counters
+    cmds:
+      - bash dev/environment-run.sh profile perf
+
+  core:trace:
+    desc: Count core.readStatus calls with a Linux bpftrace entry probe
+    cmds:
+      - bash dev/environment-run.sh profile trace
+

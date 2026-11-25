@@ -1,0 +1,121 @@
+schema_version: 1
+id: review
+kind: dag
+source: capability/dag/dag-review/SKILL.md
+entry: intake
+terminals: [VERIFIED, UNRESOLVED, BLOCKED, FAILED, NEEDS_APPROVAL]
+handoff:
+  - incident_goal
+  - target_revision
+  - observed_at
+  - owner
+  - current_node
+  - evidence_refs
+  - hypotheses
+  - experiment_results
+  - unresolved_alternatives
+  - authorized_scope
+  - forbidden_actions
+  - next_action
+  - time_budget
+nodes:
+  - id: intake
+    depends_on: []
+    side_effect: none
+    approval: none
+    evidence: [incident_goal, target_revision, observed_at, owner]
+    on_success: as-is-evidence
+    on_failure: BLOCKED
+    on_timeout: BLOCKED
+    on_missing_approval: null
+    compensation: null
+  - id: as-is-evidence
+    depends_on: [intake]
+    side_effect: read-only
+    approval: none
+    evidence: [source_refs, observed_behavior, timestamp]
+    on_success: hypotheses
+    on_failure: UNRESOLVED
+    on_timeout: UNRESOLVED
+    on_missing_approval: null
+    compensation: null
+  - id: hypotheses
+    depends_on: [as-is-evidence]
+    side_effect: none
+    approval: none
+    evidence: [candidate_causes, falsifiers, competing_explanations]
+    on_success: experiment-plan
+    on_failure: UNRESOLVED
+    on_timeout: UNRESOLVED
+    on_missing_approval: null
+    compensation: null
+  - id: experiment-plan
+    depends_on: [hypotheses]
+    side_effect: none
+    approval: conditional
+    evidence: [discriminating_observable, target, scope, side_effect_assessment]
+    on_success: experiment
+    on_failure: BLOCKED
+    on_timeout: BLOCKED
+    on_missing_approval: NEEDS_APPROVAL
+    compensation: null
+  - id: experiment
+    depends_on: [experiment-plan]
+    side_effect: read-only
+    approval: none
+    evidence: [command_or_method, target_revision, observations, observed_at]
+    on_success: conclusion
+    on_failure: UNRESOLVED
+    on_timeout: UNRESOLVED
+    on_missing_approval: null
+    compensation: null
+  - id: conclusion
+    depends_on: [experiment]
+    side_effect: none
+    approval: none
+    evidence: [supported_cause, rejected_alternatives, confidence_limit]
+    on_success: remediation-plan
+    on_failure: UNRESOLVED
+    on_timeout: UNRESOLVED
+    on_missing_approval: null
+    compensation: null
+  - id: remediation-plan
+    depends_on: [conclusion]
+    side_effect: none
+    approval: none
+    evidence: [exact_write_set, authority_owner, rollback_plan, expected_recovery]
+    on_success: remediation
+    on_failure: BLOCKED
+    on_timeout: BLOCKED
+    on_missing_approval: null
+    compensation: null
+  - id: remediation
+    depends_on: [remediation-plan]
+    side_effect: mutation
+    approval: required
+    evidence: [approval_ref, before_state, actual_write_set, after_state]
+    on_success: verification
+    on_failure: FAILED
+    on_timeout: FAILED
+    on_missing_approval: NEEDS_APPROVAL
+    compensation: "The named remediation owner follows the approved rollback plan after checking the observed post-state; never restore blindly."
+  - id: verification
+    depends_on: [remediation]
+    side_effect: read-only
+    approval: none
+    evidence: [recovery_observation, regression_result, observed_at]
+    on_success: record
+    on_failure: FAILED
+    on_timeout: FAILED
+    on_missing_approval: null
+    compensation: null
+  - id: record
+    depends_on: [verification]
+    side_effect: none
+    approval: none
+    evidence: [incident_goal, evidence_refs, decision, remaining_risks, owner]
+    on_success: VERIFIED
+    on_failure: UNRESOLVED
+    on_timeout: UNRESOLVED
+    on_missing_approval: null
+    compensation: null

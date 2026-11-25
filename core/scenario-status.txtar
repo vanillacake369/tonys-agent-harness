@@ -1,0 +1,33 @@
+# Status is read-only and reports every catalog provider.
+exec $HARNESS_BIN
+stdout 'Vault present: false \| Workspace open: false \| Runtime present: false \| Key present: false'
+stdout 'provider=claude status=DISABLED'
+stdout 'provider=codex status=DISABLED'
+stdout 'provider=kiro status=DISABLED'
+stdout 'Next: harness config init PATH or empty'
+! exists state
+! exists vault
+! exists config
+
+# Provider JSON remains a stable machine-readable boundary.
+exec $HARNESS_BIN provider status --format json
+stdout '"schema_version":1'
+stdout '"name":"codex","state":"DISABLED"'
+! stderr .
+! exists state
+
+# Cobra input errors remain distinct from execution errors.
+! exec $HARNESS_BIN missing
+stderr '^BLOCKED: unknown command "missing" for "harness"'
+
+-- repo/core/environment-public.txt --
+fixture marker
+-- repo/provider/provider-catalog.json --
+{
+  "providers": [
+    {"name":"claude","skills_path":".claude/skills"},
+    {"name":"codex","skills_path":".codex/skills","default":true},
+    {"name":"kiro","skills_path":".kiro/skills"}
+  ]
+}
+

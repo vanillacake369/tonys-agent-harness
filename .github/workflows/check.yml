@@ -1,0 +1,30 @@
+name: Check
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: check-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31.11.3
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - uses: extractions/setup-just@v3
+      # Setup uses a public-only snapshot. No user keys or deployment.
+      - run: just setup
