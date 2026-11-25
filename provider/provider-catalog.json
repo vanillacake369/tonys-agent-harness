@@ -1,0 +1,43 @@
+{
+  "mcp_servers": {
+    "atlassian": {
+      "url": "https://mcp.atlassian.com/v2/mcp"
+    },
+    "context7": {
+      "url": "https://mcp.context7.com/mcp/oauth"
+    }
+  },
+  "providers": [
+    {
+      "adapter": "claude-http",
+      "fragment_file": "mcp.json",
+      "name": "claude",
+      "skills_path": ".claude/skills"
+    },
+    {
+      "adapter": "codex-toml",
+      "config_path": ".codex/config.toml",
+      "fragment_file": "config.toml",
+      "name": "codex",
+      "skills_path": ".codex/skills",
+      "default": true
+    },
+    {
+      "adapter": "kiro-json",
+      "config_path": ".kiro/settings/mcp.json",
+      "fragment_file": "mcp.json",
+      "name": "kiro",
+      "skills_path": ".kiro/skills"
+    }
+  ],
+  "plugins": {
+    "graphify": {
+      "install": "uv tool install graphifyy==0.9.118",
+      "reviewRequired": true
+    },
+    "superpowers": {
+      "claude": "/plugin install superpowers@claude-plugins-official",
+      "codex": "/plugins -> superpowers"
+    }
+  }
+}
