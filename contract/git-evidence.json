@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "id": "tool-git-evidence",
+  "kind": "tool",
+  "source": {
+    "path": "capability/tool/tool-git-evidence/SKILL.md"
+  },
+  "invocation": {
+    "command": "bash capability/tool/tool-git-evidence/scripts/git-evidence.sh",
+    "arguments": ["--repo", ".", "--path", "<safe-relative-tracked-path>"],
+    "skill_relative_executable": "scripts/git-evidence.sh"
+  },
+  "authority": {
+    "network": false,
+    "writes": false,
+    "credential_source": "none",
+    "allowed_repository": "."
+  },
+  "input": {
+    "repo": { "const": "." },
+    "path": { "type": "safe-relative-tracked-path" }
+  },
+  "output": {
+    "success_required": ["tool", "status", "repository", "path", "head", "path_revision", "worktree_dirty", "network", "writes"],
+    "success_status": "OK"
+  },
+  "failure_statuses": ["INVALID_INPUT", "UNAVAILABLE", "UNKNOWN"],
+  "evidence": {
+    "fixture_behavior": "required",
+    "real_behavior": "not-verified"
+  }
+}
