@@ -40,7 +40,12 @@ func recordWorkspaceBase(c config) error {
 func checkWorkspaceBase(c config) error {
 	path := workspaceBasePath(c)
 	if !exists(path) {
-		return errors.New("workspace baseline missing; preserve workspace and resolve it before applying")
+		if exists(c.archive) {
+			return errors.New("workspace baseline missing; preserve workspace and reconcile it before applying")
+		}
+		if err := recordWorkspaceBase(c); err != nil {
+			return err
+		}
 	}
 	data, err := readRegular(path)
 	if err != nil {

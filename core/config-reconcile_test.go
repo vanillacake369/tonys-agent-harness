@@ -57,6 +57,19 @@ func TestReconcileRejectsArchiveChangedSinceWorkspaceOpened(t *testing.T) {
 	}
 }
 
+func TestWorkspaceWithoutBaselineCanAdoptMissingArchive(t *testing.T) {
+	c := fixtureConfig(t)
+	fixtureTree(t, c.workspace)
+	if err := checkWorkspaceBase(c); err != nil {
+		t.Fatalf("workspace with no archive could not establish its baseline: %v", err)
+	}
+	data, err := os.ReadFile(workspaceBasePath(c))
+	must(t, err)
+	if string(data) != "absent\n" {
+		t.Fatalf("workspace baseline = %q, want absent", data)
+	}
+}
+
 func TestEditWithoutApplyRetainsWorkspace(t *testing.T) {
 	c := fixtureConfig(t)
 	fixtureTree(t, c.workspace)
