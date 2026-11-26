@@ -12,6 +12,7 @@ import (
 func TestPlanDoesNotCommit(t *testing.T) {
 	c := fixtureConfig(t)
 	fixtureTree(t, c.workspace)
+	must(t, recordWorkspaceBase(c))
 	before, err := pack(c.workspace)
 	must(t, err)
 	must(t, reconcile(c, "plan"))
@@ -28,9 +29,38 @@ func TestPlanDoesNotCommit(t *testing.T) {
 	}
 }
 
+func TestReconcileRejectsArchiveChangedSinceWorkspaceOpened(t *testing.T) {
+	c := fixtureConfig(t)
+	fixtureTree(t, c.workspace)
+	put(t, c.archive, "archive opened with")
+	must(t, recordWorkspaceBase(c))
+	put(t, c.archive, "archive pulled from another checkout")
+	before, err := pack(c.workspace)
+	must(t, err)
+
+	err = reconcile(c, "sync")
+	if err == nil || !strings.Contains(err.Error(), "vault changed since workspace opened") {
+		t.Fatalf("sync error = %v, want stale workspace rejection", err)
+	}
+	got, err := pack(c.workspace)
+	must(t, err)
+	if !bytes.Equal(before, got) {
+		t.Fatal("stale workspace was changed")
+	}
+	archive, err := os.ReadFile(c.archive)
+	must(t, err)
+	if string(archive) != "archive pulled from another checkout" {
+		t.Fatal("pulled archive was overwritten")
+	}
+	if exists(c.runtime) {
+		t.Fatal("stale workspace changed runtime")
+	}
+}
+
 func TestEditWithoutApplyRetainsWorkspace(t *testing.T) {
 	c := fixtureConfig(t)
 	fixtureTree(t, c.workspace)
+	must(t, recordWorkspaceBase(c))
 	t.Setenv("VISUAL", "true")
 	must(t, editTarget(c, "agent/reviewer", false))
 	if !exists(c.workspace) || exists(c.archive) || exists(c.runtime) {

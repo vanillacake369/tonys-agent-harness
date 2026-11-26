@@ -1,6 +1,8 @@
 package core
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -10,6 +12,49 @@ import (
 	"strings"
 	"syscall"
 )
+
+func workspaceBasePath(c config) string {
+	return filepath.Join(c.state, "workspace.base")
+}
+
+func currentArchiveFingerprint(c config) (string, error) {
+	if !exists(c.archive) {
+		return "absent", nil
+	}
+	cipher, err := readRegular(c.archive)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(cipher)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func recordWorkspaceBase(c config) error {
+	fingerprint, err := currentArchiveFingerprint(c)
+	if err != nil {
+		return err
+	}
+	return atomicWrite(workspaceBasePath(c), []byte(fingerprint+"\n"))
+}
+
+func checkWorkspaceBase(c config) error {
+	path := workspaceBasePath(c)
+	if !exists(path) {
+		return errors.New("workspace baseline missing; preserve workspace and resolve it before applying")
+	}
+	data, err := readRegular(path)
+	if err != nil {
+		return err
+	}
+	current, err := currentArchiveFingerprint(c)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(string(data)) != current {
+		return errors.New("vault changed since workspace opened; preserve workspace and reconcile before applying")
+	}
+	return nil
+}
 
 type config struct {
 	repo, state, workspace, runtime, archive, key string

@@ -94,7 +94,10 @@ func initialize(c config, args []string) (resultErr error) {
 	} else if err = migrateTree(c, root, args); err != nil {
 		return err
 	}
-	return os.Rename(root, c.workspace)
+	if err = os.Rename(root, c.workspace); err != nil {
+		return err
+	}
+	return recordWorkspaceBase(c)
 }
 
 func emptyTree(root string) error {
@@ -191,6 +194,9 @@ func reconcileWithOptions(c config, cmd string, jsonOutput, quiet, verbose bool)
 		return err
 	}
 	if cmd == "unlock" && exists(c.workspace) {
+		if err := checkWorkspaceBase(c); err != nil {
+			return err
+		}
 		if !quiet {
 			fmt.Println("EDIT:", c.workspace)
 		}
@@ -201,6 +207,11 @@ func reconcileWithOptions(c config, cmd string, jsonOutput, quiet, verbose bool)
 			return errors.New("missing source")
 		}
 		return nil
+	}
+	if exists(c.workspace) {
+		if err := checkWorkspaceBase(c); err != nil {
+			return err
+		}
 	}
 	stage, err := stageCreate(c)
 	if err != nil {
@@ -227,6 +238,9 @@ func reconcileWithOptions(c config, cmd string, jsonOutput, quiet, verbose bool)
 	}
 	if cmd == "unlock" {
 		if err = os.Rename(root, c.workspace); err != nil {
+			return err
+		}
+		if err = recordWorkspaceBase(c); err != nil {
 			return err
 		}
 		if !quiet {
@@ -305,7 +319,10 @@ func lockCommit(c config, stage string, before, after []byte) error {
 	if !bytes.Equal(before, current) {
 		return errors.New("workspace changed during commit; original retained")
 	}
-	return os.RemoveAll(c.workspace)
+	if err = os.RemoveAll(c.workspace); err != nil {
+		return err
+	}
+	return os.Remove(workspaceBasePath(c))
 }
 
 type deployment struct {
