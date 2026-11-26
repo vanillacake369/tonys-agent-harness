@@ -23,3 +23,13 @@ Status must not create user state. Explicit editing holds the operation lock; ex
 Vault commit and Runtime activation are separate transactions; never claim all-or-nothing deployment.
 Single Cobra CLI. Never report skipped checks as passing.
 Do not weaken security validation or tests to make a build pass.
+
+## Harness skill authoring
+
+- When using `skill-creator` for a new Harness skill, choose `skl-{pre|mid|post}-<purpose>-{ljh|vpplab}` before
+  scaffolding. Use `pre` for planning or discovery, `mid` for execution and `post` for review or follow-up.
+  Use `vpplab` for team skills and `ljh` for personal Harness skills.
+- Start new Harness skills with `harness skill new <id> --output <existing-dir>`. Use the Vault
+  workspace's `skill/` directory for skills managed by this Harness repository.
+- Use skill-creator to fill in the generated instructions and interface copy, then run `harness skill validate <skill-dir>`.
+- When integrating a draft into a bundle, update its catalog if present and run `harness apply --dry-run` before deployment.

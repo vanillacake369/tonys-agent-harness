@@ -62,6 +62,25 @@ func contractCheck(c config, script string, args ...string) (resultErr error) {
 	return nil
 }
 
+// 후보와 단일 Skill 검사에서 같은 composition 문법을 사용한다.
+func compositionRead(doc []byte, expected int) (map[string][]string, error) {
+	blocks := compositionPattern.FindAllSubmatch(doc, -1)
+	if len(blocks) != expected {
+		return nil, errors.New("invalid composition block count")
+	}
+	if expected == 0 {
+		return nil, nil
+	}
+	var refs map[string][]string
+	if err := json.Unmarshal(blocks[0][1], &refs); err != nil {
+		return nil, errors.New("invalid composition JSON")
+	}
+	if len(refs) != 2 || refs["requires"] == nil || refs["hints"] == nil {
+		return nil, errors.New("invalid composition fields")
+	}
+	return refs, nil
+}
+
 func nodeRead(c config, root, kind, name, path string) (node, error) {
 	n := node{
 		Kind: kind, Path: "capability/" + strings.TrimPrefix(path, root+"/"), Origin: "private",
@@ -76,7 +95,6 @@ func nodeRead(c config, root, kind, name, path string) (node, error) {
 			return n, err
 		}
 	}
-	blocks := compositionPattern.FindAllSubmatch(data, -1)
 	external := false
 	if kind == "skill" {
 		p, e := provenanceRead(filepath.Dir(path))
@@ -92,17 +110,11 @@ func nodeRead(c config, root, kind, name, path string) (node, error) {
 	if kind == "tool" || external {
 		expected = 0
 	}
-	if len(blocks) != expected {
-		return n, errors.New("invalid composition block count")
+	refs, err := compositionRead(data, expected)
+	if err != nil {
+		return n, err
 	}
 	if expected == 1 {
-		var refs map[string][]string
-		if err = json.Unmarshal(blocks[0][1], &refs); err != nil {
-			return n, err
-		}
-		if len(refs) != 2 || refs["requires"] == nil || refs["hints"] == nil {
-			return n, errors.New("invalid composition fields")
-		}
 		n.Requires = refs["requires"]
 		n.Hints = refs["hints"]
 	}

@@ -49,7 +49,7 @@ just
 export PATH="$PWD/result/bin:$PATH"
 
 harness --version
-harness config status
+harness status
 ```
 
 > [!NOTE]
@@ -60,7 +60,48 @@ harness config status
 > 가능한 환경이 필요하면 위의 Nix 빌드를 권장합니다. _(v0 버전대는 아직 하위
 > 호환성을 보장하지 않습니다.)_
 
-### 2. 초기화 (최초 1회)
+#### GitHub Release 바이너리 설치
+
+macOS/Linux의 amd64와 arm64를 지원합니다. [Releases](https://github.com/vanillacake369/tonys-agent-harness/releases)에서
+`install.sh`가 포함된 태그를 골라 아래 예시의 태그를 바꾸세요. 다운로드에는
+GitHub CLI(`gh`)가 필요합니다.
+
+```sh
+tag=v0.0.1
+gh release download "$tag" --repo vanillacake369/tonys-agent-harness --pattern install.sh &&
+  sh install.sh --version "$tag"
+export PATH="$HOME/.local/bin:$PATH"
+harness --version
+```
+
+설치 스크립트는 플랫폼별 아카이브의 SHA-256을 확인하고 기본 경로인
+`~/.local/bin`에 `harness`를 설치합니다. `--bin-dir DIR`로 경로를 바꿀 수 있습니다.
+checkout에서 `just install`을 실행하면 현재 checkout을 빌드해 설치합니다.
+최신 GitHub Release를 설치하려면 `just install-release`, 특정 버전은
+`just install v0.0.1`을 실행하세요. 설치 경로를 바꾸려면 `just install --bin-dir DIR`을
+사용할 수 있습니다.
+
+셸 자동완성은 `harness completion`으로 설치합니다. 기본값은 `$SHELL`이며,
+`harness completion zsh`처럼 bash, zsh, fish 중 하나를 직접 선택할 수 있습니다.
+새 셸을 열면 자동완성이 활성화됩니다.
+
+### 2. 체크아웃 등록과 최초 설정
+
+```sh
+harness setup --repo /absolute/path/to/tonys-agent-harness
+harness status
+```
+
+`setup`은 기본 체크아웃을 기록하고 현재 상태를 표시합니다. 실행 위치 밖에서도 등록한
+체크아웃을 사용합니다. 명시적인 `--repo` 또는 `HARNESS_REPO`, 현재 디렉터리에서 찾은
+Harness 체크아웃, 등록된 기본값 순서로 선택합니다.
+
+기존 호스트에서 옮기는 경우에는 암호화 Vault, 해당 Vault의 age 키, 사용 중인 Source
+레지스트리를 준비합니다. `harness status`로 확인한 뒤 `harness apply --dry-run`과
+`harness apply`로 Runtime을 만들고 `harness provider connect NAME`으로 연결할 도구를
+선택합니다. Private Source는 새 호스트에서도 해당 저장소를 읽을 수 있어야 합니다.
+
+#### 새 Vault
 
 기존 설정 번들 디렉터리를 가져오거나 빈 Workspace로 시작합니다. 이미 Vault나
 Workspace가 존재하면 상태를 덮어쓰지 않고 안전하게 중단됩니다.
@@ -78,11 +119,30 @@ harness config init empty
 
 ### 3. 일상적인 수정 및 배포
 
-편집기에서 설정을 수정하고 닫으면 자동으로 검증, 암호화 저장, Runtime 배포까지 한 번에 진행됩니다.
+편집 후 작업 공간이 열려 있습니다. 미리보기로 확인하고 별도로 적용합니다.
 
 ```sh
-harness config edit skill/example
+harness edit skill/example
+harness apply --dry-run
+harness apply
 ```
+
+### 새 스킬 작성
+
+Harness용 스킬을 처음 만들 때는 `skl-{pre|mid|post}-<목적>-{ljh|vpplab}` 형식의 ID로
+`skill new`를 실행합니다. 예를 들어 개인 실행 단계 스킬은 `skl-mid-milestone-cycle-ljh`입니다.
+출력 디렉터리는 미리 만들고, Harness Workspace에 추가할 때는 그 안의 `skill/`을 지정합니다.
+
+```sh
+harness skill new skl-mid-milestone-cycle-ljh --output ./drafts
+# skill-creator로 SKILL.md 본문과 agents/openai.yaml 안내 문구를 작성
+harness skill validate ./drafts/skl-mid-milestone-cycle-ljh
+```
+
+다른 프로젝트에서 검증할 때는 `harness --repo /path/to/tonys-agent-harness skill validate <skill-dir>`를 사용합니다.
+단일 스킬 검증은 파일 구조, v2.1 메타데이터와 composition 선언을 검사합니다.
+다른 Capability 참조의 존재와 순환 여부는 Workspace 전체의 `harness apply --dry-run`에서 확인합니다.
+카탈로그를 관리하는 번들에 추가하는 경우 해당 번들의 카탈로그도 재생성합니다.
 
 ### 4. 여러 파일 동시 편집 (고급)
 
@@ -90,11 +150,11 @@ harness config edit skill/example
 `apply`를 실행하면 편집 내용을 저장한 뒤 Workspace를 닫고 Runtime을 갱신합니다.
 
 ```sh
-harness config workspace open --path
+harness edit --path
 # 출력된 경로에서 파일들을 직접 수정
 
-harness config apply --dry-run  # 변경 사항 미리보기
-harness config apply            # 실제 저장 및 배포
+harness apply --dry-run  # 변경 사항 미리보기
+harness apply            # 실제 저장 및 배포
 ```
 
 `apply` 실행 결과는 다음 세 가지 상태로 명확히 구분됩니다.
@@ -131,34 +191,44 @@ _(참고: 전역 Nix store는 건드리지 않으므로 시스템의 Nix 도구�
 
 ## CLI Reference
 
-| 명령어                                         | 설명                                                  |
-| :--------------------------------------------- | :---------------------------------------------------- |
-| `harness config status`                        | 복호화 없이 현재 상태 및 다음 권장 작업 확인          |
-| `harness config init PATH\|empty`              | 최초 Vault 및 Workspace 생성                          |
-| `harness config edit [kind/id]`                | 특정 설정 편집 후 검증, 저장, 배포 일괄 실행          |
-| `harness config apply [--dry-run]`             | 현재 편집 후보 검증 및 Runtime 적용                   |
-| `harness config graph [kind/id]`               | Tool, Skill, Agent 간의 의존성 관계 확인              |
-| `harness config workspace open\|close`         | 다중 파일 편집을 위한 Workspace 수동 제어             |
-| `harness config runtime reset`                 | Vault와 암호화 키는 유지한 채 배포된 Runtime만 초기화 |
-| `harness source status\|update`                | 외부 Source 커밋 고정(pin) 상태 확인 및 업데이트      |
-| `harness source cache prune`                   | 더 이상 참조하지 않는 외부 Source 캐시 정리           |
-| `harness provider status\|connect\|disconnect` | AI Provider의 Runtime 접근 권한 승인 및 해제          |
+| 명령 | 용도 |
+| --- | --- |
+| `harness` / `harness status [--format json]` | 상태와 다음 행동 확인 |
+| `harness setup [--repo PATH]` | 기본 체크아웃 등록 |
+| `harness config init PATH\|empty` | 새 Vault 초기화 |
+| `harness edit [kind/id]` / `harness edit --path` | 편집기 실행 또는 Workspace 경로 출력 |
+| `harness edit --apply [kind/id]` | 편집기 정상 종료 후 적용 |
+| `harness apply [--dry-run]` | 검증, 저장 및 배포 |
+| `harness source status\|check\|pin` | 현재 핀 확인, 후보 조회, 검토한 SHA 저장 |
+| `harness provider status\|connect\|disconnect` | 접근 상태 확인, 승인 및 해제 |
+| `harness skill new ID --output DIR` / `harness skill validate DIR` | 스킬 초안 작성 및 단독 검증 |
+| `harness completion [bash\|zsh\|fish]` | 셸 자동완성 설치 |
 
-_(구버전의 `sync`, `unlock`, `lock`, `purge` 명령어는 하위 호환성을 위해 동작하지만, 앞으로는 위 표준 명령어 사용을 권장합니다.)_
+### 고급 운영과 복구
+
+- `config graph [kind/id]`로 구성 관계를 확인합니다.
+- `config runtime reset`은 복구 전용입니다. Runtime 손상 시 사용 중인 Agent를 중지한 다음 실행하고 `harness apply`로 재구성합니다.
+- `source cache prune --dry-run`으로 정리 대상을 보고, `source cache prune`으로 참조하지 않는 캐시를 삭제합니다.
 
 ### 외부 Git Source 관리
 
 후보 커밋을 확인한 뒤, 검증이 끝난 **전체 커밋 해시(Full SHA)**를 명시적으로 고정합니다.
 Git 인증 및 조직 SSO는 시스템의 credential helper에 위임합니다.
 
+`source/registry-sources.json`의 `phases`에 원본 스킬 ID별로 `pre`, `mid`, `post` 중 하나를 지정합니다.
+Harness는 적용 후보의 디렉터리와 `SKILL.md`의 `name`을 `skl-<phase>-<원본 ID>-<Source 이름>`으로
+설정합니다. 예를 들어 `pstack`의 `unslop`은 Codex에서 `$skl-post-unslop-pstack`으로 호출합니다.
+전체 컬렉션은 모든 스킬의 phase를 지정해야 적용할 수 있습니다. 컬렉션에 `"select_by_phase": true`를
+설정하면 `phases`에 열거한 디렉터리만 고정 커밋에서 가져옵니다.
+
 ```sh
 gh auth status
 gh auth setup-git
 
-harness source update SOURCE
-harness source update SOURCE REVIEWED_FULL_SHA
-harness config apply --dry-run
-harness config apply
+harness source check SOURCE
+harness source pin SOURCE REVIEWED_FULL_SHA
+harness apply --dry-run
+harness apply
 ```
 
 > 외부 저장소의 접근 권한이 철회되더라도 로컬 캐시는 자동으로 지워지지 않습니다.

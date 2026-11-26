@@ -23,7 +23,7 @@ func setup(c config, args []string) error {
 	}
 	var alreadyInitialized = exists(c.archive) || exists(c.workspace)
 	if alreadyInitialized {
-		return errors.New("already initialized; run harness config apply")
+		return errors.New("already initialized; run harness apply")
 	}
 	parent, err := filepath.EvalSymlinks(filepath.Dir(c.archive))
 	if err != nil || parent != filepath.Dir(c.archive) {
@@ -41,13 +41,13 @@ func setup(c config, args []string) error {
 	}
 	if isEmptySetup {
 		fmt.Println("EDIT:", c.workspace)
-		fmt.Println("PENDING: add a valid capability, then run harness config apply")
+		fmt.Println("PENDING: add a valid capability, then run harness apply")
 		return nil
 	}
 	if err = reconcile(c, "sync"); err != nil {
 		return err
 	}
-	fmt.Println("READY: harness config edit; harness config apply")
+	fmt.Println("READY: harness edit; harness apply")
 	return status(c)
 }
 
@@ -404,9 +404,9 @@ func commitDeployment(c config, d deployment) error {
 
 // 편집기를 정상 종료한 경우에만 저장과 배포를 진행한다.
 // 편집기가 실패하면 복호화된 원본을 유지하여 사용자의 변경을 보호한다.
-func edit(c config) error { return editTarget(c, "") }
+func edit(c config) error { return editTarget(c, "", true) }
 
-func editTarget(c config, target string) error {
+func editTarget(c config, target string, apply bool) error {
 	path, err := editorExecutable()
 	if err != nil {
 		return err
@@ -424,7 +424,10 @@ func editTarget(c config, target string) error {
 	cmd := exec.Command(path, selected)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err = cmd.Run(); err != nil {
-		return errors.New("editor failed; workspace retained; run harness config edit or harness config apply")
+		return errors.New("editor failed; workspace retained; run harness edit or harness apply")
+	}
+	if !apply {
+		return nil
 	}
 	return reconcile(c, "sync")
 }
@@ -481,14 +484,16 @@ func Init(source string) error {
 	return withState(true, func(c config) error { return setup(c, args) })
 }
 
-func Edit(target string) error {
+func Edit(target string) error { return EditWorkspace(target, true) }
+
+func EditWorkspace(target string, apply bool) error {
 	if target != "" && !targetValid(target) {
 		return errors.New("invalid capability target")
 	}
 	if target == "" && !terminalInput() {
 		return errors.New("non-interactive edit requires kind/id")
 	}
-	return withInitializedState(func(c config) error { return editTarget(c, target) })
+	return withInitializedState(func(c config) error { return editTarget(c, target, apply) })
 }
 
 type ReconcileRequest struct{ Plan, JSON, Verbose bool }

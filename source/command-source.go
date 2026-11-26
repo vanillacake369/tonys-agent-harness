@@ -13,17 +13,22 @@ func Command(application core.Application) *cobra.Command {
 	var cmd = &cobra.Command{Use: "source", Short: "Inspect and pin Git sources", Args: cobra.NoArgs}
 	var status = commandStatus(application)
 	cmd.RunE = status.RunE
-	cmd.AddCommand(status, &cobra.Command{Use: "update [NAME] [REVISION]", Short: "Inspect or pin reviewed commit",
-		Args: cobra.MaximumNArgs(2), RunE: func(_ *cobra.Command, args []string) error {
-			var name, revision string
-			if len(args) > 0 {
-				name = args[0]
+	cmd.AddCommand(status, commandCache(application), &cobra.Command{
+		Use: "check NAME", Short: "Inspect the remote candidate without changing its pin", Args: cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error { return application.UpdateSource(args[0], "") },
+	}, &cobra.Command{
+		Use: "pin NAME FULL_SHA", Short: "Pin an explicitly reviewed Git commit", Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if args[1] == "" {
+				return errors.New("full reviewed revision required")
 			}
-			if len(args) > 1 {
-				revision = args[1]
+			if err := application.UpdateSource(args[0], args[1]); err != nil {
+				return err
 			}
-			return application.UpdateSource(name, revision)
-		}}, commandCache(application))
+			cmd.Println("Next: harness apply --dry-run")
+			return nil
+		},
+	})
 	return cmd
 }
 

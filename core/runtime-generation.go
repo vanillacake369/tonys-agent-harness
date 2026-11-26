@@ -155,7 +155,7 @@ func livePath(c config) (string, error) {
 		return path, err
 	}
 	if !exists(path) {
-		return "", errors.New("dangling runtime generation; run harness config runtime reset then harness config apply")
+		return "", errors.New("dangling runtime generation; run harness config runtime reset then harness apply")
 	}
 	if err = privateDir(path); err != nil {
 		return "", err

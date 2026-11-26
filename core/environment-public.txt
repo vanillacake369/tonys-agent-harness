@@ -1,8 +1,10 @@
+cli/command-completion.go
 cli/command-root.go
 cli/command-root_test.go
 cli/output-status.go
 cli/version-build.go
 cli/version.txt
+config/command-author.go
 config/command-config.go
 config/command-config_test.go
 contract/git-evidence.json
@@ -28,11 +30,14 @@ core/provider-link_test.go
 core/runtime-generation.go
 core/runtime-generation_test.go
 core/scenario-status.txtar
+core/skill-author.go
+core/skill-author_test.go
 core/skill-validate.sh
 core/skill-validate_test.sh
 core/source-reconcile.go
 core/source-reconcile_test.go
 core/state-config.go
+core/state-guidance_test.go
 core/state-config_test.go
 core/state-operation.go
 core/terminal-darwin.go

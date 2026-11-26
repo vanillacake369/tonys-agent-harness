@@ -6,20 +6,24 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
 
 type source struct {
-	URL        string `json:"url"`
-	Revision   string `json:"rev"`
-	Path       string `json:"path"`
-	ID         string `json:"id"`
-	Collection bool   `json:"collection,omitempty"`
+	URL           string            `json:"url"`
+	Revision      string            `json:"rev"`
+	Path          string            `json:"path"`
+	ID            string            `json:"id"`
+	Collection    bool              `json:"collection,omitempty"`
+	Phases        map[string]string `json:"phases"`
+	SelectByPhase bool              `json:"select_by_phase,omitempty"`
 }
 
 // 기존 Vault의 provenance는 읽기 호환성만 유지한다.
@@ -55,7 +59,8 @@ func sourcesRead(c config) (map[string]source, error) {
 	}
 	for name, s := range sources {
 		var invalid = !idValid(name) || !idValid(s.ID) || !safeRelative(s.Path) ||
-			(!s.Collection && filepath.Base(s.Path) != s.ID) || !githubURLPattern.MatchString(s.URL)
+			(!s.Collection && filepath.Base(s.Path) != s.ID) || !githubURLPattern.MatchString(s.URL) ||
+			!s.validSelection()
 		if invalid {
 			return nil, errors.New("invalid source catalog")
 		}
@@ -68,6 +73,33 @@ func sourcesRead(c config) (map[string]source, error) {
 
 func (s source) valid() bool {
 	return revisionPattern.MatchString(s.Revision) && safeRelative(s.Path) && idValid(s.ID)
+}
+
+func (s source) validSelection() bool {
+	if !s.SelectByPhase {
+		return true
+	}
+	if !s.Collection || len(s.Phases) == 0 {
+		return false
+	}
+	for id, phase := range s.Phases {
+		if !idValid(id) || (phase != "pre" && phase != "mid" && phase != "post") {
+			return false
+		}
+	}
+	return true
+}
+
+// 검토 대상으로 지정한 디렉터리만 archive에 포함해 미선택 파일을 가져오지 않는다.
+func (s source) archivePaths() []string {
+	if !s.SelectByPhase {
+		return []string{s.Path}
+	}
+	var paths []string
+	for _, id := range slices.Sorted(maps.Keys(s.Phases)) {
+		paths = append(paths, filepath.ToSlash(filepath.Join(s.Path, id)))
+	}
+	return paths
 }
 
 func provenanceRead(path string) (provenance, error) {
@@ -129,7 +161,7 @@ func sourceGitEnv() []string {
 Git checkout/filter/hook 실행 없이 archive를 기존 안전한 unpack으로 처리한다.
 */
 func sourceFetch(c config, s source, target string) (resultErr error) {
-	if !s.valid() {
+	if !s.valid() || !s.validSelection() {
 		return errors.New("invalid source pin")
 	}
 	var tmp, err = os.MkdirTemp(c.state, "stage-source-")
@@ -148,7 +180,8 @@ func sourceFetch(c config, s source, target string) (resultErr error) {
 	if verifyErr != nil || strings.TrimSpace(string(out)) != s.Revision {
 		return errors.New("source revision mismatch")
 	}
-	var data, archiveErr = sourceGit("-C", gitDir, "archive", "--format=tar", s.Revision, "--", s.Path)
+	var args = []string{"-C", gitDir, "archive", "--format=tar", s.Revision, "--"}
+	var data, archiveErr = sourceGit(append(args, s.archivePaths()...)...)
 	if archiveErr != nil {
 		return errors.New("cannot archive selected source path at reviewed revision; check source path and revision")
 	}
@@ -215,7 +248,7 @@ func sourcesProject(c config, root string) error {
 			continue
 		}
 		if err = sourceProject(c, root, name, s); err != nil {
-			return err
+			return fmt.Errorf("source %s projection failed: %s", name, PublicError(err))
 		}
 	}
 	return nil
@@ -223,14 +256,14 @@ func sourcesProject(c config, root string) error {
 
 func sourceProject(c config, root, name string, s source) (resultErr error) {
 	if !s.Collection {
-		target := filepath.Join(root, "skill", s.ID)
-		if exists(target) {
-			return errors.New("source ID collision; remove local duplicate manually or unpin source")
-		}
-		if err := sourceResolve(c, s, target); err != nil {
+		target, err := s.importTarget(root, name, s.ID)
+		if err != nil {
 			return err
 		}
-		return sourceProvenance(target, name, s, s.Path)
+		if err = sourceResolve(c, s, target); err != nil {
+			return err
+		}
+		return s.finishImport(c, target, name, s.Path)
 	}
 	tmp, err := os.MkdirTemp(c.state, "stage-collection-")
 	if err != nil {
@@ -252,23 +285,47 @@ func sourceProject(c config, root, name string, s source) (resultErr error) {
 		if !entry.IsDir() || !idValid(entry.Name()) {
 			return errors.New("invalid source collection entry")
 		}
-		if exists(filepath.Join(root, "skill", entry.Name())) {
-			return errors.New("source ID collision; remove local duplicate manually or unpin source")
+		target, err := s.importTarget(root, name, entry.Name())
+		if err != nil {
+			return err
 		}
-	}
-	for _, entry := range entries {
-		if entry.Type().IsRegular() {
-			continue
-		}
-		target := filepath.Join(root, "skill", entry.Name())
 		if err = copyTree(filepath.Join(tree, entry.Name()), target); err != nil {
 			return err
 		}
-		if err = sourceProvenance(target, name, s, filepath.ToSlash(filepath.Join(s.Path, entry.Name()))); err != nil {
+		if err = s.finishImport(c, target, name, filepath.ToSlash(filepath.Join(s.Path, entry.Name()))); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (s source) importTarget(root, sourceName, original string) (string, error) {
+	phase := s.Phases[original]
+	if phase != "pre" && phase != "mid" && phase != "post" {
+		return "", fmt.Errorf("source %s skill %s requires an import phase (pre, mid, post)", sourceName, original)
+	}
+	id := "skl-" + phase + "-" + original + "-" + sourceName
+	if !idValid(id) {
+		return "", fmt.Errorf("invalid imported skill ID: %s", id)
+	}
+	target := filepath.Join(root, "skill", id)
+	if exists(target) {
+		return "", fmt.Errorf("source ID collision: %s", id)
+	}
+	return target, nil
+}
+
+/*
+검토된 Git 원본과 캐시는 그대로 두고 후보의 호출 이름만 변경한다.
+이름 변환에 실패하면 후보는 폐기되고 현재 Runtime은 유지된다.
+*/
+func (s source) finishImport(c config, target, name, path string) error {
+	cmd := exec.Command("python3", filepath.Join(c.repo, "core", "metadata-validate.py"),
+		"import-name", filepath.Join(target, "SKILL.md"), filepath.Base(path), filepath.Base(target))
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("could not set imported name for %s/%s", name, filepath.Base(path))
+	}
+	return sourceProvenance(target, name, s, path)
 }
 
 func sourceProvenance(target, name string, s source, path string) error {
@@ -349,7 +406,7 @@ func sourceCandidates(c config, name string) error {
 		for _, row := range rows {
 			fmt.Printf("%s pinned=%t revision=%s\n", row.Name, row.Pinned, row.Revision)
 		}
-		fmt.Println("Next: harness source update NAME")
+		fmt.Println("Next: harness source check NAME")
 		return nil
 	}
 	sources, err := sourcesRead(c)
@@ -362,13 +419,14 @@ func sourceCandidates(c config, name string) error {
 	}
 	out, err := sourceGit("ls-remote", "--exit-code", s.URL, "HEAD")
 	if err != nil {
-		return err
+		return fmt.Errorf("source %s remote check failed: %s; verify Git credentials and repository access",
+			name, PublicError(err))
 	}
 	fields := strings.Fields(string(out))
 	if len(fields) != 2 {
 		return errors.New("invalid remote HEAD")
 	}
-	fmt.Printf("Candidate (unreviewed): %s\nReview before: harness source update %s %s\n", fields[0], name, fields[0])
+	fmt.Printf("Candidate (unreviewed): %s\nReview before: harness source pin %s %s\n", fields[0], name, fields[0])
 	return nil
 }
 
@@ -377,6 +435,9 @@ func sourceCachePath(c config, s source) string {
 	key := s.URL + "\n" + s.Revision + "\n" + s.Path + "\n" + s.ID
 	if s.Collection {
 		key += "\ncollection"
+	}
+	if s.SelectByPhase {
+		key += "\nselected\n" + strings.Join(s.archivePaths(), "\n")
 	}
 	return filepath.Join(c.state, "source-cache", hashBytes([]byte(key)))
 }

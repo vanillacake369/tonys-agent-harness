@@ -3,7 +3,9 @@ package core
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -16,10 +18,11 @@ func TestSourcePinAndCollision(t *testing.T) {
 	if !s.valid() {
 		t.Fatal("valid pin rejected")
 	}
-	target := filepath.Join(c.workspace, "skill", s.ID, "SKILL.md")
+	s.Phases = map[string]string{"fixture": "pre"}
+	target := filepath.Join(c.workspace, "skill", "skl-pre-fixture-fixture", "SKILL.md")
 	put(t, target, "local edit")
-	if sourceProject(c, c.workspace, "fixture", s) == nil {
-		t.Fatal("source collision accepted")
+	if err := sourceProject(c, c.workspace, "fixture", s); err == nil || !strings.Contains(err.Error(), "collision") {
+		t.Fatalf("expected source collision, got %v", err)
 	}
 	b, err := readRegular(target)
 	must(t, err)
@@ -66,23 +69,71 @@ func TestSourceFetchReportsMissingSelectedPath(t *testing.T) {
 
 func TestSourceCollectionProjectsEachSkillAndRejectsCollision(t *testing.T) {
 	c := fixtureConfig(t)
+	if exec.Command("python3", "-c", "import yaml").Run() != nil {
+		t.Skip("missing PyYAML")
+	}
+	parser, err := os.ReadFile("metadata-validate.py")
+	must(t, err)
+	put(t, filepath.Join(c.repo, "core/metadata-validate.py"), string(parser))
 	s := source{URL: "https://github.com/example/fixture", ID: "fixture", Path: "skills",
-		Collection: true, Revision: strings.Repeat("a", 40)}
+		Collection: true, Phases: map[string]string{"first": "pre", "second": "post"},
+		Revision: strings.Repeat("a", 40)}
 	tree := filepath.Join(c.state, "collection")
 	put(t, filepath.Join(tree, "README.md"), "index")
-	put(t, filepath.Join(tree, "first", "SKILL.md"), "first")
-	put(t, filepath.Join(tree, "second", "SKILL.md"), "second")
+	put(t, filepath.Join(tree, "first", "SKILL.md"),
+		"---\nname: 'first' # keep\ndescription: fixture\n---\nname: first\n")
+	put(t, filepath.Join(tree, "second", "SKILL.md"), "---\nname: second\ndescription: fixture\n---\nbody\n")
 	must(t, sourceCacheSave(c, s, tree))
 	root := filepath.Join(c.state, "candidate")
 	must(t, os.MkdirAll(filepath.Join(root, "skill"), 0700))
 	must(t, sourceProject(c, root, "fixture", s))
-	for _, name := range []string{"first", "second"} {
-		if !exists(filepath.Join(root, "skill", name, "SKILL.md")) {
-			t.Fatal("missing skill", name)
+	for _, id := range []string{"skl-pre-first-fixture", "skl-post-second-fixture"} {
+		doc, err := readRegular(filepath.Join(root, "skill", id, "SKILL.md"))
+		must(t, err)
+		if !strings.Contains(string(doc), "name: "+id) {
+			t.Fatalf("missing imported name %s in %q", id, doc)
 		}
+	}
+	doc, err := readRegular(filepath.Join(root, "skill", "skl-pre-first-fixture", "SKILL.md"))
+	must(t, err)
+	if string(doc) != "---\nname: skl-pre-first-fixture # keep\ndescription: fixture\n---\nname: first\n" {
+		t.Fatalf("unrelated skill content changed: %q", doc)
+	}
+	raw, err := readRegular(filepath.Join(sourceCachePath(c, s), "skill", "first", "SKILL.md"))
+	must(t, err)
+	if !strings.Contains(string(raw), "name: 'first' # keep") {
+		t.Fatal("import mutated the source cache")
 	}
 	if sourceProject(c, root, "fixture", s) == nil {
 		t.Fatal("collision accepted")
+	}
+	delete(s.Phases, "first")
+	err = sourceProject(c, root, "fixture", s)
+	if err == nil || !strings.Contains(err.Error(), "requires an import phase") {
+		t.Fatalf("missing import phase accepted: %v", err)
+	}
+}
+
+func TestSourceSelectedCollectionLimitsArchiveAndSeparatesCache(t *testing.T) {
+	c := fixtureConfig(t)
+	s := source{URL: "https://github.com/example/fixture", ID: "fixture", Path: "skills",
+		Collection: true, SelectByPhase: true, Revision: strings.Repeat("a", 40),
+		Phases: map[string]string{"zeta": "post", "alpha": "pre"}}
+	if !s.validSelection() || !slices.Equal(s.archivePaths(), []string{"skills/alpha", "skills/zeta"}) {
+		t.Fatal("archive must select only configured paths in stable order")
+	}
+	cache := sourceCachePath(c, s)
+	s.Phases["alpha"] = "mid"
+	if sourceCachePath(c, s) != cache {
+		t.Fatal("phase change must reuse the selected upstream bytes")
+	}
+	delete(s.Phases, "alpha")
+	if sourceCachePath(c, s) == cache {
+		t.Fatal("different selected paths reused the same cache")
+	}
+	s.Phases["../other"] = "pre"
+	if s.validSelection() {
+		t.Fatal("unsafe selection accepted")
 	}
 }
 

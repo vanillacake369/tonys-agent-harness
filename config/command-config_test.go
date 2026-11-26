@@ -8,9 +8,8 @@ import (
 func TestConfigLifecycleCommandRoutes(t *testing.T) {
 	cmd := Command(core.NewApplication())
 	for _, route := range [][]string{
-		{"apply"},
-		{"workspace", "open"},
-		{"workspace", "close"},
+		{"init"},
+		{"graph"},
 		{"runtime", "reset"},
 	} {
 		found, _, err := cmd.Find(route)
@@ -19,13 +18,13 @@ func TestConfigLifecycleCommandRoutes(t *testing.T) {
 		}
 	}
 
-	for _, name := range []string{"sync", "unlock", "lock", "purge"} {
-		found, _, err := cmd.Find([]string{name})
-		if err != nil {
-			t.Fatalf("missing compatibility route %s: %v", name, err)
-		}
-		if !found.Hidden {
-			t.Fatalf("compatibility route %s is visible in normal help", name)
+	for _, route := range [][]string{
+		{"status"}, {"edit"}, {"apply"}, {"scaffold"}, {"validate"}, {"workspace"},
+		{"sync"}, {"unlock"}, {"lock"}, {"purge"},
+	} {
+		found, _, err := cmd.Find(route)
+		if err == nil && found != cmd {
+			t.Fatalf("legacy route still available: %v", route)
 		}
 	}
 }

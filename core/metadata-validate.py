@@ -35,7 +35,23 @@ def require(condition):
         raise ValueError("invalid catalog metadata")
 
 
-def entry(root, path):
+def import_name(path, original, imported):
+    doc = path.read_bytes().decode("utf-8")
+    require(doc.startswith("---\n"))
+    _, divider, content = doc.partition("\n")
+    metadata, fence, body = content.partition("\n---\n")
+    require(divider and fence and yaml_read(metadata)["name"] == original)
+    node = yaml.compose(metadata, Loader=UniqueLoader)
+    key, value = next((k, v) for k, v in node.value if k.value == "name")
+    require(isinstance(value, yaml.ScalarNode) and value.start_mark.index >= key.end_mark.index)
+    candidate = metadata[:value.start_mark.index] + imported + metadata[value.end_mark.index:]
+    before = yaml_read(metadata)
+    before["name"] = imported
+    require(yaml_read(candidate) == before)
+    path.write_bytes(("---\n" + candidate + fence + body).encode("utf-8"))
+
+
+def entry(root, path, standalone=False):
     doc = path.read_text(encoding="utf-8")
     parts = doc.split("---", 2)
     require(len(parts) == 3 and parts[0] == "")
@@ -43,7 +59,11 @@ def entry(root, path):
     name = meta["name"]
     kind = meta["metadata"]["kind"]
     require(isinstance(name, str) and len(name) <= 64 and re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name))
-    require(kind == path.relative_to(root).parts[0])
+    expected_kind = "skill" if standalone else path.relative_to(root).parts[0]
+    require(kind == expected_kind)
+    if standalone:
+        behavior = meta["metadata"]["behavior"]
+        require(isinstance(behavior, str) and behavior.strip())
     require(name == (path.stem if kind == "agent" else path.parent.name))
     require(isinstance(meta["description"], str) and 0 < len(meta["description"]) <= 1024)
     interface = meta["metadata"]
@@ -78,6 +98,11 @@ if __name__ == "__main__":
     try:
         if sys.argv[1:] == ["yaml"]:
             json.dump(yaml_read(sys.stdin.read()), sys.stdout, allow_nan=False)
+        elif len(sys.argv) == 5 and sys.argv[1] == "import-name":
+            import_name(Path(sys.argv[2]), sys.argv[3], sys.argv[4])
+        elif len(sys.argv) == 3 and sys.argv[1] == "skill":
+            root = Path(sys.argv[2])
+            entry(root, root / "SKILL.md", standalone=True)
         elif len(sys.argv) == 3 and sys.argv[1] == "catalog":
             catalog_check(Path(sys.argv[2]))
         else:

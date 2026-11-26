@@ -28,6 +28,16 @@ func TestPlanDoesNotCommit(t *testing.T) {
 	}
 }
 
+func TestEditWithoutApplyRetainsWorkspace(t *testing.T) {
+	c := fixtureConfig(t)
+	fixtureTree(t, c.workspace)
+	t.Setenv("VISUAL", "true")
+	must(t, editTarget(c, "agent/reviewer", false))
+	if !exists(c.workspace) || exists(c.archive) || exists(c.runtime) {
+		t.Fatal("edit changed a deployment boundary")
+	}
+}
+
 func TestSetupExplicitSource(t *testing.T) {
 	c := fixtureConfig(t)
 	source := filepath.Join(filepath.Dir(c.repo), "manual-source")

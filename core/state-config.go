@@ -186,7 +186,52 @@ func repositoryRoot(cwd string) (string, error) {
 			break
 		}
 	}
-	return "", errors.New("repository not found; set HARNESS_REPO or use --repo")
+	path, err := defaultRepositoryPath()
+	if err != nil {
+		return "", err
+	}
+	data, err := readRegular(path)
+	if os.IsNotExist(err) {
+		return "", errors.New("repository not found; run harness setup --repo PATH")
+	}
+	if err != nil {
+		return "", err
+	}
+	repo := string(data)
+	if !filepath.IsAbs(repo) || filepath.Clean(repo) != repo {
+		return "", errors.New("invalid default checkout; run harness setup --repo PATH")
+	}
+	return repo, nil
+}
+
+func defaultRepositoryPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".config", "tonys-agent-harness", "default-checkout"), nil
+}
+
+/*
+사용자가 선택한 체크아웃만 저장한다.
+설정의 유효성을 확인한 후 원자적으로 교체하여 다른 호출이 중간 값을 읽지 않게 한다.
+*/
+func SetupRepository() error {
+	c, err := loadConfig()
+	if err != nil {
+		return err
+	}
+	if _, err = readStatus(c); err != nil {
+		return err
+	}
+	path, err := defaultRepositoryPath()
+	if err != nil {
+		return err
+	}
+	if err = privateDir(filepath.Dir(path)); err != nil {
+		return err
+	}
+	return atomicWrite(path, []byte(c.repo))
 }
 
 type SourceStatus struct {
@@ -255,14 +300,31 @@ func readStatus(c config) (StatusReport, error) {
 	if err != nil {
 		return r, err
 	}
-	r.Next = providerNext(r.Providers, defaultProvider)
-	if !r.ArchiveExists && !r.WorkspaceExists || r.LegacyPlaintext {
-		r.Next = "harness config init PATH or empty"
-	}
-	if r.WorkspaceExists && !r.LegacyPlaintext {
-		r.Next = "harness config apply"
-	}
+	r.Next = statusNext(r, exists(c.runtime), defaultProvider)
 	return r, nil
+}
+
+/*
+복원과 편집 상태를 연결 안내보다 먼저 확인한다.
+파일 존재 여부만 관찰하므로 동기화 완료를 선언하지 않는다.
+*/
+func statusNext(r StatusReport, runtimeDirectory bool, defaultProvider string) string {
+	switch {
+	case r.LegacyPlaintext:
+		return "inspect legacy plaintext before migration"
+	case !r.ArchiveExists && runtimeDirectory:
+		return "restore the existing encrypted Vault"
+	case r.ArchiveExists && !r.KeyExists:
+		return "restore the age key for this Vault"
+	case r.WorkspaceExists:
+		return "harness apply --dry-run"
+	case !r.ArchiveExists:
+		return "harness config init PATH or empty"
+	case !r.RuntimeExists:
+		return "harness apply"
+	default:
+		return providerNext(r.Providers, defaultProvider)
+	}
 }
 
 func sourceStatusRows(c config) ([]SourceStatus, error) {
@@ -306,7 +368,7 @@ func providerNext(rows []ProviderStatus, defaultProvider string) string {
 		case "MIGRATION_REQUIRED":
 			return "harness provider connect " + row.Name
 		case "DRIFTED", "BLOCKED":
-			return "harness config apply"
+			return "harness apply"
 		case "CONNECTED":
 			connected = true
 		}
@@ -314,5 +376,5 @@ func providerNext(rows []ProviderStatus, defaultProvider string) string {
 	if !connected {
 		return "harness provider connect " + defaultProvider
 	}
-	return "harness config apply --dry-run"
+	return ""
 }
