@@ -12,8 +12,12 @@ import (
 )
 
 func TestVersion(t *testing.T) {
-	if buildVersion != "0.0.1" {
-		t.Fatalf("got %q want %q", buildVersion, "0.0.1")
+	version, err := os.ReadFile("version.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := strings.TrimSpace(string(version)); buildVersion != want {
+		t.Fatalf("got %q want %q", buildVersion, want)
 	}
 }
 

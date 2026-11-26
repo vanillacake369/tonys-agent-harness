@@ -45,7 +45,7 @@ AI Provider가 읽을 수 있는 런타임 환경으로 안전하게 배포하�
 ### 1. 빌드 및 설치
 
 ```sh
-just
+just setup
 export PATH="$PWD/result/bin:$PATH"
 
 harness --version
@@ -67,7 +67,7 @@ macOS/Linux의 amd64와 arm64를 지원합니다. [Releases](https://github.com/
 GitHub CLI(`gh`)가 필요합니다.
 
 ```sh
-tag=v0.0.1
+tag=v0.0.2
 gh release download "$tag" --repo vanillacake369/tonys-agent-harness --pattern install.sh &&
   sh install.sh --version "$tag"
 export PATH="$HOME/.local/bin:$PATH"
@@ -78,7 +78,7 @@ harness --version
 `~/.local/bin`에 `harness`를 설치합니다. `--bin-dir DIR`로 경로를 바꿀 수 있습니다.
 checkout에서 `just install`을 실행하면 현재 checkout을 빌드해 설치합니다.
 최신 GitHub Release를 설치하려면 `just install-release`, 특정 버전은
-`just install v0.0.1`을 실행하세요. 설치 경로를 바꾸려면 `just install --bin-dir DIR`을
+`just install v0.0.2`를 실행하세요. 설치 경로를 바꾸려면 `just install --bin-dir DIR`을
 사용할 수 있습니다.
 
 셸 자동완성은 `harness completion`으로 설치합니다. 기본값은 `$SHELL`이며,
@@ -267,7 +267,7 @@ harness provider disconnect codex
 전체 공개 의존성 검증, 테스트, 빌드를 한 번에 실행합니다.
 
 ```sh
-just
+just verify
 ```
 
 코어 로직 수정 후 빠른 회귀 테스트(단위, 통합, CLI/Bash/Nix 시나리오, 성능 측정)를 돌릴 때는 `task`를 사용합니다.
@@ -289,7 +289,7 @@ Issue 제보와 Pull Request를 환영합니다.
 3. **PR 작성:** 사용자 동작의 변화, 실행한 검증 명령어와 결과, 그리고 남아 있는 잠재적 위험 요소를 명시해 주세요.
 4. **필수 검증:** PR 병합 전 아래 명령어가 모두 통과해야 합니다.
     ```sh
-    just       # 공개 경계, 전체 테스트, secret scan, 빌드
+    just verify # 공개 경계, 전체 테스트, secret scan, 빌드
     task core  # 코어 단위·통합·시나리오·성능 회귀 테스트
     ```
 
@@ -302,15 +302,15 @@ Issue 제보와 Pull Request를 환영합니다.
 ## Release
 
 릴리스 태그는 저장소의 버전 메타데이터와 일치하는 `vMAJOR.MINOR.PATCH` 형식을 따릅니다.
-릴리스 커밋에서 `just` 검증을 마친 뒤 annotated tag를 push하면
+릴리스 커밋에서 `just verify` 검증을 마친 뒤 annotated tag를 push하면
 GitHub Actions가 자동으로 플랫폼별 바이너리 압축 파일, 체크섬, 릴리스 노트를 생성합니다.
 
 _(이미 게시된 태그와 빌드 산출물은 덮어쓰지 않으며, 수정 사항이 생기면 반드시 새 패치 버전으로 릴리스합니다.)_
 
 ```sh
-just
-git tag -a v0.0.1 -m "v0.0.1"
-git push origin v0.0.1
+just verify
+git tag -a v0.0.2 -m "v0.0.2"
+git push origin main v0.0.2
 ```
 
 ## License

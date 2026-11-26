@@ -25,7 +25,7 @@ jobs:
           set -euo pipefail
           version=$(tr -d '\n' <cli/version.txt)
           test "$GITHUB_REF_NAME" = "v$version"
-          just
+          just verify
           sh dev/install-release_test.sh
       - name: Build release archives
         shell: bash

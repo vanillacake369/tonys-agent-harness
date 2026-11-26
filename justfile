@@ -7,6 +7,11 @@ setup:
     @bash dev/environment-run.sh check
     @bash dev/environment-run.sh build
 
+# Run the full repository checks and build without changing dependency pins.
+verify:
+    @bash dev/environment-run.sh check
+    @bash dev/environment-run.sh build
+
 # 현재 체크아웃을 빌드해 설치한다. 버전을 주면 GitHub Release에서 설치한다.
 [positional-arguments]
 install *args:
