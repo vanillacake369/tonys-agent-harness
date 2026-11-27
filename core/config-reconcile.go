@@ -194,7 +194,7 @@ func reconcileWithOptions(c config, cmd string, jsonOutput, quiet, verbose bool)
 		return err
 	}
 	if cmd == "unlock" && exists(c.workspace) {
-		if err := checkWorkspaceBase(c); err != nil {
+		if _, err := checkWorkspaceBase(c); err != nil {
 			return err
 		}
 		if !quiet {
@@ -211,7 +211,7 @@ func reconcileWithOptions(c config, cmd string, jsonOutput, quiet, verbose bool)
 	var editing = exists(c.workspace)
 	var archiveBase string
 	if editing {
-		if err := checkWorkspaceBase(c); err != nil {
+		if _, err := checkWorkspaceBase(c); err != nil {
 			return err
 		}
 	} else {
@@ -266,15 +266,15 @@ func reconcileWithOptions(c config, cmd string, jsonOutput, quiet, verbose bool)
 	if err != nil {
 		return err
 	}
+	if cmd == "lock" {
+		return lockCommit(c, stage, before, after)
+	}
 	changed := !bytes.Equal(before, after)
-	if exists(c.workspace) {
-		changed, err = archiveChanged(c, stage, after)
+	if editing {
+		changed, err = archiveChanged(c, filepath.Join(stage, "compare"), after)
 		if err != nil {
 			return err
 		}
-	}
-	if cmd == "lock" {
-		return lockCommit(c, stage, before, after)
 	}
 	nodes, err := deploymentNodes(c, root)
 	if err != nil {
@@ -306,10 +306,7 @@ func lockCommit(c config, stage string, before, after []byte) (resultErr error) 
 		return err
 	}
 	defer func() { resultErr = errors.Join(resultErr, lock.Close()) }()
-	if err = checkWorkspaceBase(c); err != nil {
-		return err
-	}
-	baseline, err := readRegular(workspaceBasePath(c))
+	baseline, err := checkWorkspaceBase(c)
 	if err != nil {
 		return err
 	}
@@ -320,30 +317,17 @@ func lockCommit(c config, stage string, before, after []byte) (resultErr error) 
 	if !bytes.Equal(before, current) {
 		return errors.New("workspace changed; retry after closing editor")
 	}
-	same := false
-	if exists(c.archive) {
-		previous := filepath.Join(stage, "previous")
-		if err = os.Mkdir(previous, 0700); err != nil {
-			return err
-		}
-		if err = decrypt(c, previous); err != nil {
-			return err
-		}
-		data, err := pack(previous)
-		if err != nil {
-			return err
-		}
-		same = bytes.Equal(data, after)
+	changed, err := archiveChanged(c, filepath.Join(stage, "previous"), after)
+	if err != nil {
+		return err
 	}
-	if !same {
-		if err = seal(c, after, strings.TrimSpace(string(baseline))); err != nil {
-			return err
-		}
+	if changed {
+		err = seal(c, after, baseline)
+	} else {
+		err = verifyArchiveFingerprint(c, baseline)
 	}
-	if same {
-		if err = verifyArchiveFingerprint(c, strings.TrimSpace(string(baseline))); err != nil {
-			return err
-		}
+	if err != nil {
+		return err
 	}
 	current, err = pack(c.workspace)
 	if err != nil {
@@ -366,11 +350,10 @@ type deployment struct {
 	providersChanged                            bool
 }
 
-func archiveChanged(c config, stage string, after []byte) (bool, error) {
+func archiveChanged(c config, path string, after []byte) (bool, error) {
 	if !exists(c.archive) {
 		return true, nil
 	}
-	path := filepath.Join(stage, "compare")
 	if err := os.Mkdir(path, 0700); err != nil {
 		return false, err
 	}

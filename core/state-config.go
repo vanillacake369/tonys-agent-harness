@@ -29,14 +29,6 @@ func currentArchiveFingerprint(c config) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func recordWorkspaceBase(c config) error {
-	fingerprint, err := currentArchiveFingerprint(c)
-	if err != nil {
-		return err
-	}
-	return writeWorkspaceBase(c, fingerprint)
-}
-
 func writeWorkspaceBase(c config, fingerprint string) error {
 	return atomicWrite(workspaceBasePath(c), []byte(fingerprint+"\n"))
 }
@@ -52,21 +44,23 @@ func verifyArchiveFingerprint(c config, fingerprint string) error {
 	return nil
 }
 
-func checkWorkspaceBase(c config) error {
-	path := workspaceBasePath(c)
-	if !exists(path) {
+func checkWorkspaceBase(c config) (string, error) {
+	data, err := readRegular(workspaceBasePath(c))
+	baseline := "absent"
+	if os.IsNotExist(err) {
 		if exists(c.archive) {
-			return errors.New("workspace baseline missing; preserve workspace and reconcile it before applying")
+			return "", errors.New("workspace baseline missing; preserve workspace and reconcile it before applying")
 		}
-		if err := recordWorkspaceBase(c); err != nil {
-			return err
+		// 확인 당시 Vault가 없었다는 사실을 기록해 새 Vault를 기준으로 채택하지 않는다.
+		if err = writeWorkspaceBase(c, baseline); err != nil {
+			return "", err
 		}
+	} else if err != nil {
+		return "", err
+	} else {
+		baseline = strings.TrimSpace(string(data))
 	}
-	data, err := readRegular(path)
-	if err != nil {
-		return err
-	}
-	return verifyArchiveFingerprint(c, strings.TrimSpace(string(data)))
+	return baseline, verifyArchiveFingerprint(c, baseline)
 }
 
 type config struct {

@@ -107,7 +107,7 @@ func TestSOPSIntegration(t *testing.T) {
 	must(t, err)
 	must(t, os.Chmod(c.key, 0600))
 	fixtureTree(t, c.workspace)
-	must(t, recordWorkspaceBase(c))
+	must(t, writeWorkspaceBase(c, "absent"))
 	must(t, reconcile(c, "lock"))
 	before, err := readRegular(c.archive)
 	must(t, err)

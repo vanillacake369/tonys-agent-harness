@@ -12,7 +12,7 @@ import (
 func TestPlanDoesNotCommit(t *testing.T) {
 	c := fixtureConfig(t)
 	fixtureTree(t, c.workspace)
-	must(t, recordWorkspaceBase(c))
+	must(t, writeWorkspaceBase(c, "absent"))
 	before, err := pack(c.workspace)
 	must(t, err)
 	must(t, reconcile(c, "plan"))
@@ -33,7 +33,9 @@ func TestReconcileRejectsArchiveChangedSinceWorkspaceOpened(t *testing.T) {
 	c := fixtureConfig(t)
 	fixtureTree(t, c.workspace)
 	put(t, c.archive, "archive opened with")
-	must(t, recordWorkspaceBase(c))
+	baseline, err := currentArchiveFingerprint(c)
+	must(t, err)
+	must(t, writeWorkspaceBase(c, baseline))
 	put(t, c.archive, "archive pulled from another checkout")
 	before, err := pack(c.workspace)
 	must(t, err)
@@ -58,22 +60,44 @@ func TestReconcileRejectsArchiveChangedSinceWorkspaceOpened(t *testing.T) {
 }
 
 func TestWorkspaceWithoutBaselineCanAdoptMissingArchive(t *testing.T) {
+	// GIVEN a workspace with neither a baseline nor a vault.
 	c := fixtureConfig(t)
 	fixtureTree(t, c.workspace)
-	if err := checkWorkspaceBase(c); err != nil {
-		t.Fatalf("workspace with no archive could not establish its baseline: %v", err)
-	}
+
+	// WHEN the workspace baseline is checked.
+	baseline, err := checkWorkspaceBase(c)
+
+	// THEN the absent vault is recorded as the baseline.
+	must(t, err)
 	data, err := os.ReadFile(workspaceBasePath(c))
 	must(t, err)
-	if string(data) != "absent\n" {
-		t.Fatalf("workspace baseline = %q, want absent", data)
+	if baseline != "absent" || string(data) != "absent\n" {
+		t.Fatalf("workspace baseline = %q, file = %q, want absent", baseline, data)
+	}
+}
+
+func TestWorkspaceWithoutBaselineCannotAdoptExistingVault(t *testing.T) {
+	// GIVEN a workspace without a baseline and a vault that already exists.
+	c := fixtureConfig(t)
+	fixtureTree(t, c.workspace)
+	put(t, c.archive, "existing archive")
+
+	// WHEN the workspace baseline is checked.
+	_, err := checkWorkspaceBase(c)
+
+	// THEN the check fails and leaves the workspace without a baseline.
+	if err == nil || !strings.Contains(err.Error(), "workspace baseline missing") {
+		t.Fatalf("unexpected result: %v", err)
+	}
+	if exists(workspaceBasePath(c)) {
+		t.Fatal("existing vault was adopted as the workspace baseline")
 	}
 }
 
 func TestEditWithoutApplyRetainsWorkspace(t *testing.T) {
 	c := fixtureConfig(t)
 	fixtureTree(t, c.workspace)
-	must(t, recordWorkspaceBase(c))
+	must(t, writeWorkspaceBase(c, "absent"))
 	t.Setenv("VISUAL", "true")
 	must(t, editTarget(c, "agent/reviewer", false))
 	if !exists(c.workspace) || exists(c.archive) || exists(c.runtime) {
@@ -130,6 +154,7 @@ func TestDeploymentReportNamesOutcome(t *testing.T) {
 }
 
 func TestDeploymentCandidateRunsOneFullValidation(t *testing.T) {
+	// GIVEN a candidate with a validator that records each invocation.
 	c := fixtureConfig(t)
 	fixtureTree(t, c.workspace)
 	put(t, filepath.Join(c.workspace, "skill/fixture/SKILL.md"),
@@ -140,8 +165,11 @@ func TestDeploymentCandidateRunsOneFullValidation(t *testing.T) {
 	log := filepath.Join(c.state, "validator.log")
 	t.Setenv("HARNESS_VALIDATOR_LOG", log)
 
+	// WHEN structural checks and deployment validation run in order.
 	must(t, validateStructure(c.workspace))
 	_, err := deploymentNodes(c, c.workspace)
+
+	// THEN full validation runs exactly once.
 	must(t, err)
 	data, err := os.ReadFile(log)
 	must(t, err)
@@ -218,13 +246,18 @@ func TestSetupEmptyIntegration(t *testing.T) {
 }
 
 func TestLockCommitRechecksWorkspaceBase(t *testing.T) {
+	// GIVEN a workspace opened before the vault changed.
 	c := fixtureConfig(t)
 	fixtureTree(t, c.workspace)
-	must(t, recordWorkspaceBase(c))
+	must(t, writeWorkspaceBase(c, "absent"))
 	snapshot, err := pack(c.workspace)
 	must(t, err)
 	put(t, c.archive, "new archive")
+
+	// WHEN the stale workspace is committed.
 	err = lockCommit(c, c.state, snapshot, snapshot)
+
+	// THEN the baseline check rejects the commit and preserves the workspace.
 	if err == nil || !strings.Contains(err.Error(), "vault changed since workspace opened") {
 		t.Fatalf("unexpected commit result: %v", err)
 	}
@@ -240,36 +273,60 @@ func TestTwoWorkspacesShareVaultLockIntegration(t *testing.T) {
 			t.Skip("missing " + tool)
 		}
 	}
-	first, second := fixtureConfig(t), fixtureConfig(t)
-	first.key = filepath.Join(filepath.Dir(first.key), "keys", "identity")
-	must(t, keyGenerate(first))
-	second.archive, second.key = first.archive, first.key
-	fixtureTree(t, first.workspace)
-	fixtureTree(t, second.workspace)
-	must(t, recordWorkspaceBase(first))
-	must(t, recordWorkspaceBase(second))
-	snapshot, err := pack(second.workspace)
-	must(t, err)
+	sharedVault := func(t *testing.T) (config, config, []byte) {
+		t.Helper()
+		first, second := fixtureConfig(t), fixtureConfig(t)
+		first.key = filepath.Join(filepath.Dir(first.key), "keys", "identity")
+		must(t, keyGenerate(first))
+		second.archive, second.key = first.archive, first.key
+		fixtureTree(t, first.workspace)
+		fixtureTree(t, second.workspace)
+		must(t, writeWorkspaceBase(first, "absent"))
+		must(t, writeWorkspaceBase(second, "absent"))
+		snapshot, err := pack(second.workspace)
+		must(t, err)
+		return first, second, snapshot
+	}
 
-	lock, err := vaultOperationLock(first)
-	must(t, err)
-	err = lockCommit(second, second.state, snapshot, snapshot)
-	must(t, lock.Close())
-	if err == nil || !strings.Contains(err.Error(), "operation busy") {
-		t.Fatalf("concurrent writer was not blocked: %v", err)
-	}
-	must(t, reconcile(first, "sync"))
-	written, err := readRegular(first.archive)
-	must(t, err)
-	err = lockCommit(second, second.state, snapshot, snapshot)
-	if err == nil || !strings.Contains(err.Error(), "vault changed") {
-		t.Fatalf("stale second workspace was not rejected: %v", err)
-	}
-	workspace, err := pack(second.workspace)
-	must(t, err)
-	cipher, err := readRegular(first.archive)
-	must(t, err)
-	if !bytes.Equal(snapshot, workspace) || !bytes.Equal(written, cipher) {
-		t.Fatal("rejected writer changed workspace or ciphertext")
-	}
+	t.Run("another workspace owns the lock", func(t *testing.T) {
+		// GIVEN the first workspace holds the shared vault lock.
+		first, second, snapshot := sharedVault(t)
+		lock, err := vaultOperationLock(first)
+		must(t, err)
+		t.Cleanup(func() { must(t, lock.Close()) })
+
+		// WHEN the second workspace tries to commit.
+		err = lockCommit(second, second.state, snapshot, snapshot)
+
+		// THEN the lock blocks the second writer.
+		if err == nil || !strings.Contains(err.Error(), "operation busy") {
+			t.Fatalf("concurrent writer was not blocked: %v", err)
+		}
+		if exists(first.archive) || !exists(second.workspace) {
+			t.Fatal("blocked writer changed vault or removed workspace")
+		}
+	})
+
+	t.Run("another workspace already committed", func(t *testing.T) {
+		// GIVEN the first workspace has committed since the second one was opened.
+		first, second, snapshot := sharedVault(t)
+		must(t, reconcile(first, "sync"))
+		written, err := readRegular(first.archive)
+		must(t, err)
+
+		// WHEN the second workspace tries to commit its stale snapshot.
+		err = lockCommit(second, second.state, snapshot, snapshot)
+
+		// THEN the stale commit is rejected and both workspace and ciphertext are preserved.
+		if err == nil || !strings.Contains(err.Error(), "vault changed") {
+			t.Fatalf("stale second workspace was not rejected: %v", err)
+		}
+		workspace, err := pack(second.workspace)
+		must(t, err)
+		cipher, err := readRegular(first.archive)
+		must(t, err)
+		if !bytes.Equal(snapshot, workspace) || !bytes.Equal(written, cipher) {
+			t.Fatal("rejected writer changed workspace or ciphertext")
+		}
+	})
 }
