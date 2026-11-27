@@ -21,3 +21,8 @@ install *args:
 [positional-arguments]
 install-release *args:
     @sh install.sh "$@"
+
+# 로컬 main을 기준으로 같은 부모 디렉터리에 새 작업 트리를 만든다.
+[positional-arguments]
+worktree name:
+    @sh dev/worktree-create.sh "$1"

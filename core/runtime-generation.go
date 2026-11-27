@@ -11,6 +11,11 @@ import (
 	"strings"
 )
 
+const (
+	runtimeGraphFile    = ".capability-graph.json"
+	runtimeGraphVersion = 3
+)
+
 func hashBytes(b []byte) string { return fmt.Sprintf("%x", sha256.Sum256(b)) }
 
 // Runtime 후보는 외부 Nix Store가 아닌 사용자 전용 디렉터리에서 구성한다.
@@ -30,12 +35,12 @@ func runtimeBuild(c config, root, target string, nodes map[string]node) error {
 			return err
 		}
 	}
-	graph := map[string]any{"schema_version": 3, "scope": "bundle", "capabilities": nodes}
+	graph := map[string]any{"schema_version": runtimeGraphVersion, "scope": "bundle", "capabilities": nodes}
 	b, err := json.MarshalIndent(graph, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(target, ".capability-graph.json"), b, 0600)
+	return os.WriteFile(filepath.Join(target, runtimeGraphFile), b, 0600)
 }
 
 func runtimeNode(c config, root, target string, n node, description string) error {
@@ -157,7 +162,7 @@ func livePath(c config) (string, error) {
 	if !exists(path) {
 		return "", errors.New("dangling runtime generation; run harness config runtime reset then harness apply")
 	}
-	if err = privateDir(path); err != nil {
+	if err = privateDirCheck(path); err != nil {
 		return "", err
 	}
 	return path, nil
@@ -300,7 +305,7 @@ func inventory(path string) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	b, err := readRegular(filepath.Join(path, ".capability-graph.json"))
+	b, err := readRegular(filepath.Join(path, runtimeGraphFile))
 	if err != nil {
 		return nil, err
 	}
@@ -318,7 +323,7 @@ func inventory(path string) (map[string]string, error) {
 		result[id] = hashBytes(data)
 	}
 	for _, entry := range entries {
-		if entry.Name() == ".capability-graph.json" || entry.Name() == ".capability" {
+		if entry.Name() == runtimeGraphFile || entry.Name() == ".capability" {
 			continue
 		}
 		if !entry.IsDir() {

@@ -58,6 +58,8 @@ dev/core-scenario.sh
 dev/environment-run.sh
 dev/profile-core.sh
 dev/vendor-hash.txt
+dev/worktree-create.sh
+dev/worktree-create_test.go
 flake.lock
 flake.nix
 go.mod

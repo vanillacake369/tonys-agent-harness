@@ -206,7 +206,9 @@ _(참고: 전역 Nix store는 건드리지 않으므로 시스템의 Nix 도구�
 
 ### 고급 운영과 복구
 
-- `config graph [kind/id]`로 구성 관계를 확인합니다.
+- `config graph [kind/id]`로 로컬 선언의 구성 관계를 확인합니다.
+- `config graph --scope runtime [kind/id]`로 외부 Source가 포함된 활성 세대의 그래프를 조회합니다.
+  이 조회는 Vault 키와 작업 잠금 없이 동작합니다. `--format json`은 활성 노드의 출처를 표시합니다.
 - `config runtime reset`은 복구 전용입니다. Runtime 손상 시 사용 중인 Agent를 중지한 다음 실행하고 `harness apply`로 재구성합니다.
 - `source cache prune --dry-run`으로 정리 대상을 보고, `source cache prune`으로 참조하지 않는 캐시를 삭제합니다.
 
@@ -263,6 +265,9 @@ harness provider disconnect codex
   승인 없이 기존 파일을 덮어쓰지 않습니다.
 
 ## Development
+
+`just worktree NAME`은 기본 체크아웃과 같은 부모 아래에 작업 트리를 만들고 경로를 출력합니다.
+로컬 `main`에서 `codex/NAME` 브랜치를 시작합니다.
 
 전체 공개 의존성 검증, 테스트, 빌드를 한 번에 실행합니다.
 

@@ -70,27 +70,35 @@ func privateDir(path string) error {
 	if err := os.MkdirAll(path, 0700); err != nil {
 		return err
 	}
+	return privateDirCheck(path)
+}
+
+func privateDirCheck(path string) error {
 	info, err := os.Lstat(path)
 	if err != nil {
 		return err
+	}
+	var unsafe = errors.New("unsafe private directory; verify ownership, symlinks and permissions (must be 0700)")
+	if !info.IsDir() || info.Mode().Perm() != 0700 || info.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) {
+		return unsafe
 	}
 	real, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		return err
 	}
-	if !info.IsDir() || info.Mode().Perm() != 0700 || real != path ||
-		info.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) {
-		return errors.New("unsafe private directory; verify ownership, symlinks and permissions (must be 0700)")
+	if real != path {
+		return unsafe
 	}
 	return nil
 }
 
 // 조회 명령은 없는 경로를 만들지 않는다.
 func existingPrivateDir(path string) error {
-	if !exists(path) {
+	err := privateDirCheck(path)
+	if os.IsNotExist(err) {
 		return nil
 	}
-	return privateDir(path)
+	return err
 }
 
 func exists(path string) bool { _, err := os.Lstat(path); return !os.IsNotExist(err) }

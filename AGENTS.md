@@ -33,3 +33,9 @@ Do not weaken security validation or tests to make a build pass.
   workspace's `skill/` directory for skills managed by this Harness repository.
 - Use skill-creator to fill in the generated instructions and interface copy, then run `harness skill validate <skill-dir>`.
 - When integrating a draft into a bundle, update its catalog if present and run `harness apply --dry-run` before deployment.
+
+## Development worktrees
+
+- Use `just worktree NAME` to create a Git worktree beside the primary Harness checkout.
+  The tool starts branch `codex/NAME` at local `main` and prints the path. Run it only when worktree creation is in scope.
+- A task already using a linked worktree continues there unless the user asks for a new one.

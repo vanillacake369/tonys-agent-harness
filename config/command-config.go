@@ -109,6 +109,7 @@ func commandGraph(application core.Application) *cobra.Command {
 		return application.Graph(req, c.OutOrStdout())
 	}
 	cmd.Flags().StringVar(&req.Format, "format", "tree", "Output: tree, dot or json")
+	cmd.Flags().StringVar(&req.Scope, "scope", "local", "Graph source: local or runtime")
 	cmd.Flags().StringVar(&req.Relation, "relation", "", "Filter: requires or hints")
 	cmd.Flags().BoolVar(&req.Reverse, "reverse", false, "Explore consumers")
 	cmd.Flags().IntVar(&req.Depth, "depth", -1, "Traversal depth; -1 means unlimited")

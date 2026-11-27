@@ -11,13 +11,14 @@ import (
 )
 
 type graphOptions struct {
-	target, format, relation string
-	reverse                  bool
-	depth                    int
+	target, format, relation, scope string
+	reverse                         bool
+	depth                           int
 }
 type graphNode struct {
-	ID   string `json:"id"`
-	Kind string `json:"kind"`
+	ID     string `json:"id"`
+	Kind   string `json:"kind"`
+	Origin string `json:"origin,omitempty"`
 }
 type graphEdge struct {
 	From string `json:"from"`
@@ -32,17 +33,20 @@ type graphView struct {
 }
 
 type GraphRequest struct {
-	Target, Format, Relation string
-	Reverse                  bool
-	Depth                    int // -1 means unlimited
+	Target, Format, Relation, Scope string
+	Reverse                         bool
+	Depth                           int // -1 means unlimited
 }
 
 func graphRequest(req GraphRequest) (graphOptions, error) {
 	if req.Format == "" {
 		req.Format = "tree"
 	}
+	if req.Scope == "" {
+		req.Scope = "local"
+	}
 	o := graphOptions{
-		target: req.Target, format: req.Format, relation: req.Relation,
+		target: req.Target, format: req.Format, relation: req.Relation, scope: req.Scope,
 		reverse: req.Reverse, depth: req.Depth,
 	}
 	if req.Format != "tree" && req.Format != "json" && req.Format != "dot" {
@@ -50,6 +54,9 @@ func graphRequest(req GraphRequest) (graphOptions, error) {
 	}
 	if req.Relation != "" && req.Relation != "requires" && req.Relation != "hints" {
 		return o, errors.New("unknown graph relation")
+	}
+	if req.Scope != "local" && req.Scope != "runtime" {
+		return o, errors.New("unknown graph scope")
 	}
 	if req.Target != "" && !targetValid(req.Target) {
 		return o, errors.New("invalid graph target")
@@ -64,6 +71,9 @@ func Graph(req GraphRequest, w io.Writer) error {
 	opts, err := graphRequest(req)
 	if err != nil {
 		return err
+	}
+	if opts.scope == "runtime" {
+		return graphReadRuntime(opts, w)
 	}
 	return withInitializedState(func(c config) error { return graphRead(c, opts, w) })
 }
@@ -100,11 +110,79 @@ func graphRead(c config, o graphOptions, w io.Writer) (resultErr error) {
 }
 
 /*
+활성 세대가 발행한 그래프만 읽는다.
+Vault, 편집본과 작업 잠금은 이 조회의 전제에 포함되지 않는다.
+*/
+func graphReadRuntime(o graphOptions, w io.Writer) error {
+	c, err := loadConfig()
+	if err != nil {
+		return err
+	}
+	if err = existingPrivateDir(c.state); err != nil {
+		return err
+	}
+	if err = existingPrivateDir(c.runtime); err != nil {
+		return err
+	}
+	live, err := livePath(c)
+	if err != nil {
+		return err
+	}
+	if live == "" {
+		return errors.New("no active runtime; run harness apply first")
+	}
+	data, err := readRegular(filepath.Join(live, runtimeGraphFile))
+	if err != nil {
+		return fmt.Errorf("cannot read active runtime graph: %w", err)
+	}
+	nodes, err := graphRuntimeNodes(data)
+	if err != nil {
+		return err
+	}
+	view, err := graphBuild(nodes, o)
+	if err != nil {
+		return err
+	}
+	return graphRender(w, view, o)
+}
+
+func graphRuntimeNodes(data []byte) (map[string]node, error) {
+	var manifest struct {
+		Version int             `json:"schema_version"`
+		Scope   string          `json:"scope"`
+		Nodes   map[string]node `json:"capabilities"`
+	}
+	var invalid = errors.New("invalid runtime graph")
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return nil, invalid
+	}
+	if manifest.Version != runtimeGraphVersion || manifest.Scope != "bundle" {
+		return nil, errors.New("unsupported runtime graph format")
+	}
+	if len(manifest.Nodes) == 0 {
+		return nil, invalid
+	}
+	for id, n := range manifest.Nodes {
+		if !targetValid(n.Kind + "/" + id) {
+			return nil, invalid
+		}
+	}
+	if err := relationsValidate(manifest.Nodes); err != nil {
+		return nil, invalid
+	}
+	return manifest.Nodes, nil
+}
+
+/*
 requires와 hints를 구분하고 원래 edge 방향을 보존한다.
 역방향 탐색은 도달 범위만 바꾸며 실행 순서를 의미하지 않는다.
 */
 func graphBuild(nodes map[string]node, o graphOptions) (graphView, error) {
 	v := graphView{Version: 1, Scope: "local_desired", Nodes: []graphNode{}, Edges: []graphEdge{}}
+	var runtime = o.scope == "runtime"
+	if runtime {
+		v.Scope = "active_runtime"
+	}
 	ids := make([]string, 0, len(nodes))
 	for id := range nodes {
 		ids = append(ids, id)
@@ -113,7 +191,11 @@ func graphBuild(nodes map[string]node, o graphOptions) (graphView, error) {
 	for _, id := range ids {
 		n := nodes[id]
 		from := n.Kind + "/" + id
-		v.Nodes = append(v.Nodes, graphNode{from, n.Kind})
+		entry := graphNode{ID: from, Kind: n.Kind}
+		if runtime {
+			entry.Origin = n.Origin
+		}
+		v.Nodes = append(v.Nodes, entry)
 		v.Edges = append(v.Edges, graphEdges(nodes, from, n.Requires, "requires")...)
 		v.Edges = append(v.Edges, graphEdges(nodes, from, n.Hints, "hints")...)
 	}
@@ -127,7 +209,7 @@ func graphBuild(nodes map[string]node, o graphOptions) (graphView, error) {
 	kind, id, _ := strings.Cut(o.target, "/")
 	n, ok := nodes[id]
 	if !ok || n.Kind != kind {
-		return v, errors.New("unknown graph target; run harness config graph to list available IDs")
+		return v, errors.New("unknown graph target; list available IDs without the target")
 	}
 	return graphFilter(v, o), nil
 }
@@ -206,7 +288,11 @@ func graphDOT(w io.Writer, v graphView) error {
 }
 func graphTree(w io.Writer, v graphView, o graphOptions) error {
 	var b strings.Builder
-	fmt.Fprintln(&b, "Graph: local desired (before source reconciliation)")
+	if v.Scope == "active_runtime" {
+		fmt.Fprintln(&b, "Graph: active runtime")
+	} else {
+		fmt.Fprintln(&b, "Graph: local desired (before source reconciliation)")
+	}
 	adj := map[string][]graphEdge{}
 	incoming := map[string]bool{}
 	for _, e := range v.Edges {
