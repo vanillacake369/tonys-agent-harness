@@ -101,6 +101,30 @@ def import_name(path, original, imported):
     path.write_bytes(("---\n" + candidate + fence + body).encode("utf-8"))
 
 
+def runtime_display(root):
+    for path in sorted(root.glob("*/agents/openai.yaml")):
+        try:
+            text = path.read_bytes().decode("utf-8")
+            data = yaml_read(text)
+        except (ValueError, yaml.YAMLError):
+            # Imported skills can omit usable Codex UI metadata and fall back to their skill ID.
+            continue
+        interface = data.get("interface") if isinstance(data, dict) else None
+        skill_id = path.parent.parent.name
+        if not isinstance(interface, dict) or interface.get("display_name") in (None, "", skill_id):
+            continue
+        doc = yaml.compose(text, Loader=UniqueLoader)
+        fields = next(value for key, value in doc.value if key.value == "interface")
+        key, value = next((key, value) for key, value in fields.value if key.value == "display_name")
+        start, end = value.start_mark.index, value.end_mark.index
+        require(isinstance(value, yaml.ScalarNode) and start >= key.end_mark.index)
+        newline = re.search(r"\r?\n$", text[start:end])
+        candidate = text[:start] + json.dumps(skill_id) + (newline[0] if newline else "") + text[end:]
+        data["interface"] = dict(interface, display_name=skill_id)
+        require(yaml_read(candidate) == data)
+        path.write_bytes(candidate.encode("utf-8"))
+
+
 def entry(root, path, standalone=False):
     doc = path.read_text(encoding="utf-8")
     parts = doc.split("---", 2)
@@ -152,6 +176,8 @@ if __name__ == "__main__":
             skill_structure(Path(sys.argv[2]), sys.argv[3])
         elif len(sys.argv) == 5 and sys.argv[1] == "import-name":
             import_name(Path(sys.argv[2]), sys.argv[3], sys.argv[4])
+        elif len(sys.argv) == 3 and sys.argv[1] == "runtime-display":
+            runtime_display(Path(sys.argv[2]))
         elif len(sys.argv) == 3 and sys.argv[1] == "skill":
             root = Path(sys.argv[2])
             entry(root, root / "SKILL.md", standalone=True)

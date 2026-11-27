@@ -3,6 +3,7 @@ package core
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -58,6 +59,34 @@ func TestRuntimeBuildUsesCapabilityKind(t *testing.T) {
 	}
 	if exists(filepath.Join(target, "reviewer.md")) {
 		t.Fatal("agent document was projected into runtime")
+	}
+}
+
+func TestRuntimeSkillDisplayUsesCapabilityID(t *testing.T) {
+	c := fixtureConfig(t)
+	root := c.workspace
+	const ui = "interface:\n  display_name: 'Skill / Meeting'\n  short_description: 'Recap weekly meetings'\n" +
+		"policy:\n  allow_implicit_invocation: false\n"
+	const policyOnly = "policy:\n  allow_implicit_invocation: false\n"
+	const description = "---\nname: meeting\ndescription: Recap weekly meetings.\n---\n\nBody\n"
+	put(t, filepath.Join(root, "skill/meeting/SKILL.md"), description)
+	put(t, filepath.Join(root, "skill/meeting/agents/openai.yaml"), ui)
+	put(t, filepath.Join(root, "skill/imported/SKILL.md"), description)
+	put(t, filepath.Join(root, "skill/imported/agents/openai.yaml"), policyOnly)
+	target := filepath.Join(c.state, "bundle")
+	must(t, runtimeBuild(c, root, target, map[string]node{
+		"meeting": {Kind: "skill"}, "imported": {Kind: "skill", Origin: "external"},
+	}))
+	for path, want := range map[string]string{
+		"meeting/agents/openai.yaml": strings.Replace(ui, "'Skill / Meeting'", `"meeting"`, 1),
+		"meeting/SKILL.md":           description, "imported/agents/openai.yaml": policyOnly,
+		".capability/skill/meeting/agents/openai.yaml": ui,
+	} {
+		data, err := os.ReadFile(filepath.Join(target, path))
+		must(t, err)
+		if string(data) != want {
+			t.Errorf("%s: got %q, want %q", path, data, want)
+		}
 	}
 }
 

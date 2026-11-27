@@ -35,6 +35,10 @@ func runtimeBuild(c config, root, target string, nodes map[string]node) error {
 			return err
 		}
 	}
+	// Provider는 스킬 ID와 설명을 별도 필드로 표시한다. 보관된 원본에는 손대지 않는다.
+	if err := validatorRun(c, "python3", "metadata-validate.py", "runtime-display", target); err != nil {
+		return fmt.Errorf("could not normalize runtime skill display names: %w", err)
+	}
 	graph := map[string]any{"schema_version": runtimeGraphVersion, "scope": "bundle", "capabilities": nodes}
 	b, err := json.MarshalIndent(graph, "", "  ")
 	if err != nil {
