@@ -24,9 +24,10 @@ type source struct {
 	Collection    bool              `json:"collection,omitempty"`
 	Phases        map[string]string `json:"phases"`
 	SelectByPhase bool              `json:"select_by_phase,omitempty"`
+	ReviewedTree  string            `json:"reviewed_tree_sha256,omitempty"`
 }
 
-// 기존 Vault의 provenance는 읽기 호환성만 유지한다.
+// Source 투영기가 생성한 출처를 Runtime에 기록한다.
 type provenance struct {
 	Source   string `json:"source"`
 	Revision string `json:"revision"`
@@ -67,6 +68,9 @@ func sourcesRead(c config) (map[string]source, error) {
 		if s.Revision != "" && !s.valid() {
 			return nil, errors.New("invalid source revision")
 		}
+		if s.ReviewedTree != "" && (s.Revision == "" || !sourceCacheNamePattern.MatchString(s.ReviewedTree)) {
+			return nil, errors.New("invalid reviewed source digest")
+		}
 	}
 	return sources, nil
 }
@@ -102,22 +106,13 @@ func (s source) archivePaths() []string {
 	return paths
 }
 
-func provenanceRead(path string) (provenance, error) {
-	var v provenance
-	var b, err = readRegular(filepath.Join(path, "source-provenance.json"))
-	if err != nil {
-		return v, err
-	}
-	err = json.Unmarshal(b, &v)
-	return v, err
-}
-
 /*
 Git 인증은 사용자 credential helper에 위임한다. 대화형 인증이나
 원격 오류 출력은 허용하지 않는다. 회사 인증은 gh auth setup-git으로 설정한다.
 */
 func sourceGit(args ...string) ([]byte, error) {
-	var options = []string{"-c", "protocol.file.allow=never", "-c", "protocol.ext.allow=never",
+	var options = []string{"-c", "protocol.allow=never", "-c", "protocol.https.allow=always",
+		"-c", "protocol.file.allow=never", "-c", "protocol.ext.allow=never",
 		"-c", "core.hooksPath=/dev/null", "-c", "credential.interactive=false"}
 	var ctx, cancel = context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -325,19 +320,30 @@ func (s source) finishImport(c config, target, name, path string) error {
 	if err != nil {
 		return fmt.Errorf("could not set imported name for %s/%s", name, filepath.Base(path))
 	}
-	return sourceProvenance(target, name, s, path)
+	return sourceProvenance(c, target, name, s, path)
 }
 
-func sourceProvenance(target, name string, s source, path string) error {
+func sourceProvenance(c config, target, name string, s source, path string) error {
+	manifest := filepath.Join(target, "source-provenance.json")
+	if err := os.Remove(manifest); err != nil && !os.IsNotExist(err) {
+		return err
+	}
 	content, err := digest(target)
 	if err != nil {
 		return err
 	}
-	b, err := json.Marshal(provenance{Source: name, Revision: s.Revision, Path: path, Content: content})
+	entry := provenance{Source: name, Revision: s.Revision, Path: path, Content: content}
+	b, err := json.Marshal(entry)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(target, "source-provenance.json"), b, 0600)
+	if err = os.WriteFile(manifest, b, 0600); err != nil {
+		return err
+	}
+	if c.imports != nil {
+		c.imports[filepath.Base(target)] = entry
+	}
+	return nil
 }
 
 func pinSource(c config, args []string) (resultErr error) {
@@ -361,10 +367,15 @@ func pinSource(c config, args []string) (resultErr error) {
 	if err = prepareValidators(&c, tmp); err != nil {
 		return err
 	}
-	if err = sourceResolve(c, s, filepath.Join(tmp, "skill")); err != nil {
+	tree := filepath.Join(tmp, "skill")
+	if err = sourceFetch(c, s, tree); err != nil {
 		return err
 	}
-	if err = sourceCacheSave(c, s, filepath.Join(tmp, "skill")); err != nil {
+	s.ReviewedTree, err = digest(tree)
+	if err != nil {
+		return err
+	}
+	if err = sourceCacheSave(c, s, tree); err != nil {
 		return err
 	}
 	sources[args[0]] = s
@@ -445,33 +456,68 @@ func sourceCachePath(c config, s source) string {
 	return filepath.Join(c.state, "source-cache", hashBytes([]byte(key)))
 }
 
-func sourceResolve(c config, s source, target string) error {
-	var cache = sourceCachePath(c, s)
+func sourceResolve(c config, s source, target string) (resultErr error) {
+	cache := sourceCachePath(c, s)
 	if !exists(cache) {
-		return sourceFetch(c, s, target)
+		if s.ReviewedTree == "" {
+			return sourceFetch(c, s, target)
+		}
+		stage, err := os.MkdirTemp(c.state, "stage-reviewed-source-")
+		if err != nil {
+			return err
+		}
+		defer cleanupPath(&resultErr, stage)
+		tree := filepath.Join(stage, "skill")
+		if err = sourceFetch(c, s, tree); err != nil {
+			return err
+		}
+		if err = verifySourceTree(tree, s.ReviewedTree, ""); err != nil {
+			return err
+		}
+		return os.Rename(tree, target)
 	}
-	if err := privateDir(cache); err != nil {
-		return err
-	}
-	var expected, err = readRegular(filepath.Join(cache, "digest"))
+	tree, err := reviewedSourceCache(cache, s.ReviewedTree)
 	if err != nil {
 		return err
 	}
-	var tree = filepath.Join(cache, "skill")
+	return copyTree(tree, target)
+}
+
+func reviewedSourceCache(cache, reviewed string) (string, error) {
+	if err := privateDirCheck(cache); err != nil {
+		return "", err
+	}
+	expected, err := readRegular(filepath.Join(cache, "digest"))
+	if err != nil {
+		return "", err
+	}
+	cached := strings.TrimSpace(string(expected))
+	if !sourceCacheNamePattern.MatchString(cached) {
+		return "", errors.New("invalid source cache digest")
+	}
+	tree := filepath.Join(cache, "skill")
+	return tree, verifySourceTree(tree, reviewed, cached)
+}
+
+func verifySourceTree(tree, reviewed, cached string) error {
 	actual, err := digest(tree)
 	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(string(expected)) != actual {
+	if reviewed != "" && reviewed != actual {
+		return errors.New("source tree differs from the reviewed digest")
+	}
+	if cached != "" && cached != actual {
 		return errors.New("source cache integrity failure; remove cache manually")
 	}
-	return copyTree(tree, target)
+	return nil
 }
 
 func sourceCacheSave(c config, s source, tree string) (resultErr error) {
 	var cache = sourceCachePath(c, s)
 	if exists(cache) {
-		return nil
+		_, err := reviewedSourceCache(cache, s.ReviewedTree)
+		return err
 	}
 	var parent = filepath.Dir(cache)
 	if err := privateDir(parent); err != nil {
@@ -485,9 +531,12 @@ func sourceCacheSave(c config, s source, tree string) (resultErr error) {
 	if err = copyTree(tree, filepath.Join(tmp, "skill")); err != nil {
 		return err
 	}
-	content, err := digest(tree)
+	content, err := digest(filepath.Join(tmp, "skill"))
 	if err != nil {
 		return err
+	}
+	if s.ReviewedTree != "" && content != s.ReviewedTree {
+		return errors.New("source tree differs from the reviewed digest")
 	}
 	if err = os.WriteFile(filepath.Join(tmp, "digest"), []byte(content+"\n"), 0600); err != nil {
 		return err

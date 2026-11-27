@@ -289,6 +289,7 @@ func reconcileWithOptions(c config, cmd string, jsonOutput, quiet, verbose bool)
 
 // Source를 임시 후보에 투영한 뒤 최종 그래프와 모든 계약을 한 번 검증한다.
 func deploymentNodes(c config, root string) (map[string]node, error) {
+	c.imports = make(map[string]provenance)
 	if err := sourcesProject(c, root); err != nil {
 		return nil, err
 	}

@@ -181,3 +181,44 @@ func TestSourceCachePruneRejectsUnexpectedEntry(t *testing.T) {
 		t.Fatal("rejected cache entry was removed")
 	}
 }
+
+func TestReviewedSourceDigestControlsOfflineResolution(t *testing.T) {
+	c := fixtureConfig(t)
+	const entry = `{"url":"https://github.com/example/fixture","id":"fixture","path":"skills/fixture",` +
+		`"rev":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`
+	var s source
+	must(t, json.Unmarshal([]byte(entry), &s))
+	tree := filepath.Join(c.state, "fixture")
+	put(t, filepath.Join(tree, "SKILL.md"), "fixture")
+	must(t, sourceCacheSave(c, s, tree))
+	content, err := digest(tree)
+	must(t, err)
+	reviewed := func(digest string) source {
+		var pinned source
+		doc := strings.TrimSuffix(entry, "}") + `,"reviewed_tree_sha256":"` + digest + `"}`
+		must(t, json.Unmarshal([]byte(doc), &pinned))
+		return pinned
+	}
+	must(t, sourceResolve(c, reviewed(content), filepath.Join(c.state, "offline")))
+	err = sourceResolve(c, reviewed(strings.Repeat("b", 64)), filepath.Join(c.state, "unapproved"))
+	if err == nil || exists(filepath.Join(c.state, "unapproved")) {
+		t.Fatal("cache content outside the reviewed digest was accepted")
+	}
+}
+
+func TestVaultSkillKeepsLocalOriginIntegration(t *testing.T) {
+	integrationOnly(t)
+	c := fixtureConfig(t)
+	fixtureTree(t, c.workspace)
+	dir := filepath.Join(c.workspace, "skill/local")
+	put(t, filepath.Join(dir, "SKILL.md"),
+		"---\nname: local\ndescription: Local fixture.\n---\n\n"+
+			"```json composition\n{\"requires\":[],\"hints\":[]}\n```\n")
+	put(t, filepath.Join(dir, "source-provenance.json"),
+		`{"source":"fixture","revision":"old","path":"skill/local","content_sha256":"fixture"}`)
+	nodes, err := validate(c, c.workspace)
+	must(t, err)
+	if nodes["local"].Origin != "private" || nodes["local"].Provenance != nil {
+		t.Fatal("a workspace file changed the validated source identity")
+	}
+}

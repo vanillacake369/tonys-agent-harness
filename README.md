@@ -217,6 +217,8 @@ _(참고: 전역 Nix store는 건드리지 않으므로 시스템의 Nix 도구�
 ### 외부 Git Source 관리
 
 후보 커밋을 확인한 뒤, 검증이 끝난 **전체 커밋 해시(Full SHA)**를 명시적으로 고정합니다.
+새 pin은 해당 커밋을 다시 가져와 선택 경로의 내용 digest를 레지스트리에 저장합니다.
+기존 pin은 읽을 수 있으며 다시 고정할 때 검토 digest가 기록됩니다.
 Git 인증 및 조직 SSO는 시스템의 credential helper에 위임합니다.
 
 `source/registry-sources.json`의 `phases`에 원본 스킬 ID별로 `pre`, `mid`, `post` 중 하나를 지정합니다.

@@ -71,6 +71,7 @@ func checkWorkspaceBase(c config) error {
 
 type config struct {
 	repo, state, workspace, runtime, archive, key, validatorDir string
+	imports                                                     map[string]provenance
 }
 
 // 체크아웃과 평문 저장 경계를 분리하고 사용자 전용 디렉터리를 확보한다.

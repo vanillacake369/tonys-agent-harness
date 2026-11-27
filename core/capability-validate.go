@@ -90,16 +90,10 @@ func nodeRead(c config, root, kind, name, path string) (node, error) {
 			return n, err
 		}
 	}
-	external := false
-	if kind == "skill" {
-		p, e := provenanceRead(filepath.Dir(path))
-		external = e == nil && p.Content != ""
-		if e == nil {
-			n.Provenance = &p
-		}
-	}
-	if external {
+	imported, external := c.imports[name]
+	if kind == "skill" && external {
 		n.Origin = "external"
+		n.Provenance = &imported
 	}
 	expected := 1
 	if kind == "tool" || external {
