@@ -122,7 +122,7 @@ printf 'Darwin\n'
 SH
   chmod 0700 "$mock_bin/uname"
 
-  run env PATH="$mock_bin" /bin/bash "$BATS_TEST_DIRNAME/profile-core.sh" perf
+  run env PATH="$mock_bin" "$BASH" "$BATS_TEST_DIRNAME/profile-core.sh" perf
   [ "$status" -eq 2 ]
   [ "$output" = 'BLOCKED: core profiling requires Linux' ]
 }
@@ -136,7 +136,7 @@ printf 'Linux\n'
 SH
   chmod 0700 "$mock_bin/uname"
 
-  run env PATH="$mock_bin" /bin/bash "$BATS_TEST_DIRNAME/profile-core.sh" perf
+  run env PATH="$mock_bin" "$BASH" "$BATS_TEST_DIRNAME/profile-core.sh" perf
   [ "$status" -eq 1 ]
   [ "$output" = 'BLOCKED: perf unavailable' ]
 }
@@ -154,7 +154,7 @@ printf '@calls: 0\n'
 SH
   chmod 0700 "$mock_bin/uname" "$mock_bin/bpftrace"
 
-  run env PATH="$mock_bin:$PATH" /bin/bash "$BATS_TEST_DIRNAME/profile-core.sh" trace
+  run env PATH="$mock_bin:$PATH" "$BASH" "$BATS_TEST_DIRNAME/profile-core.sh" trace
   [ "$status" -eq 1 ]
   [[ "$output" == *'BLOCKED: core.readStatus call not observed'* ]]
 }

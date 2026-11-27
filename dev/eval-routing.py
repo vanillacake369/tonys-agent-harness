@@ -34,11 +34,12 @@ BEFORE = {
     "retrospective": "Review an incident, its timeline and follow-up actions.",
 }
 AFTER = BEFORE | {
-    "design": "Use for recommendations and comparing architecture options without modifying code.",
+    "design": "Use for architecture recommendations without code changes. Explicit arena requests use arena.",
     "architect": "Use for types/signatures that will be implemented after the design decision is settled.",
     "pr-review": "Use for a new static PR review and report. Existing thread requests use review-threads.",
     "rca": "Use for an active diagnosis. Closed incident summaries use retrospective.",
-    "arena": "Use only when independent alternatives and parallel evaluation are explicitly requested and allowed.",
+    "arena": "Use alone when independent alternatives and parallel evaluation are explicitly requested and allowed. "
+             "It covers design framing and comparison.",
 }
 
 
