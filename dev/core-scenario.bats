@@ -114,6 +114,7 @@ SH
 }
 
 @test "profiling rejects non-Linux hosts before running tools" {
+  # GIVEN the host reports Darwin.
   mock_bin="$test_root/bin"
   mkdir -p "$mock_bin"
   cat >"$mock_bin/uname" <<'SH'
@@ -122,12 +123,16 @@ printf 'Darwin\n'
 SH
   chmod 0700 "$mock_bin/uname"
 
+  # WHEN the perf scenario is requested.
   run env PATH="$mock_bin" "$BASH" "$BATS_TEST_DIRNAME/profile-core.sh" perf
+
+  # THEN profiling rejects the platform before invoking a profiling tool.
   [ "$status" -eq 2 ]
   [ "$output" = 'BLOCKED: core profiling requires Linux' ]
 }
 
 @test "profiling reports a missing Linux tool without attempting the scenario" {
+  # GIVEN a Linux host without perf.
   mock_bin="$test_root/bin"
   mkdir -p "$mock_bin"
   cat >"$mock_bin/uname" <<'SH'
@@ -136,12 +141,16 @@ printf 'Linux\n'
 SH
   chmod 0700 "$mock_bin/uname"
 
+  # WHEN the perf scenario is requested.
   run env PATH="$mock_bin" "$BASH" "$BATS_TEST_DIRNAME/profile-core.sh" perf
+
+  # THEN profiling reports the missing executable.
   [ "$status" -eq 1 ]
   [ "$output" = 'BLOCKED: perf unavailable' ]
 }
 
 @test "trace rejects a successful probe that observed no core call" {
+  # GIVEN a Linux probe exits successfully with zero calls.
   mock_bin="$test_root/bin"
   mkdir -p "$mock_bin"
   cat >"$mock_bin/uname" <<'SH'
@@ -154,7 +163,10 @@ printf '@calls: 0\n'
 SH
   chmod 0700 "$mock_bin/uname" "$mock_bin/bpftrace"
 
+  # WHEN the trace scenario is requested.
   run env PATH="$mock_bin:$PATH" "$BASH" "$BATS_TEST_DIRNAME/profile-core.sh" trace
+
+  # THEN profiling reports the missing observation and fails.
   [ "$status" -eq 1 ]
   [[ "$output" == *'BLOCKED: core.readStatus call not observed'* ]]
 }

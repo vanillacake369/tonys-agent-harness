@@ -9,6 +9,7 @@ import (
 )
 
 func TestNodesReadRunsIndependentValidatorsConcurrently(t *testing.T) {
+	// GIVEN four independent skills whose validators wait for another worker.
 	c := fixtureConfig(t)
 	root := c.workspace
 	must(t, emptyTree(root))
@@ -33,7 +34,10 @@ done
 exit 1
 `)
 
+	// WHEN the bundle is validated.
 	nodes, err := nodesRead(c, root)
+
+	// THEN all validators complete with their peers.
 	must(t, err)
 	if len(nodes) != 4 {
 		t.Fatalf("got %d nodes want 4", len(nodes))
@@ -85,6 +89,8 @@ func TestSkillValidatorIntegration(t *testing.T) {
 
 func TestDAGProjectsStageCapabilitiesIntegration(t *testing.T) {
 	integrationOnly(t)
+
+	// GIVEN a review DAG and a locally declared evidence tool.
 	c := fixtureConfig(t)
 	root := c.workspace
 	must(t, emptyTree(root))
@@ -105,19 +111,36 @@ func TestDAGProjectsStageCapabilitiesIntegration(t *testing.T) {
 	path := filepath.Join(dir, "DAG.yaml")
 	body, err := os.ReadFile(path)
 	must(t, err)
-	doc := strings.Replace(string(body), "  - id: experiment\n",
-		"  - id: experiment\n    capabilities: [evidence]\n", 1)
-	put(t, path, doc)
-	nodes, err := validate(c, root)
-	must(t, err)
-	if strings.Join(nodes["dag-review"].Hints, ",") != "evidence" {
-		t.Fatalf("missing stage-to-tool graph edge: %+v", nodes["dag-review"])
-	}
-	if nodes["evidence"].Execution == nil || nodes["evidence"].Execution.Method != "cli" {
-		t.Fatal("tool execution method is missing from the graph")
-	}
-	put(t, path, strings.Replace(doc, "[evidence]", "[missing-tool]", 1))
-	if _, err = validate(c, root); err == nil {
-		t.Fatal("dangling stage Capability passed validation")
+	for _, tc := range []struct {
+		name, tool string
+		wantError  bool
+	}{
+		{name: "declared tool", tool: "evidence"},
+		{name: "missing tool", tool: "missing-tool", wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// GIVEN a DAG stage referencing the selected tool.
+			doc := strings.Replace(string(body), "  - id: experiment\n",
+				"  - id: experiment\n    capabilities: ["+tc.tool+"]\n", 1)
+			put(t, path, doc)
+
+			// WHEN the bundle is validated.
+			nodes, err := validate(c, root)
+
+			// THEN a missing reference is rejected and a declared tool appears in the graph.
+			if tc.wantError {
+				if err == nil || !strings.Contains(err.Error(), "invalid capability relation") {
+					t.Fatalf("expected dangling stage Capability to be rejected: %v", err)
+				}
+				return
+			}
+			must(t, err)
+			if strings.Join(nodes["dag-review"].Hints, ",") != "evidence" {
+				t.Fatalf("missing stage-to-tool graph edge: %+v", nodes["dag-review"])
+			}
+			if nodes["evidence"].Execution == nil || nodes["evidence"].Execution.Method != "cli" {
+				t.Fatal("tool execution method is missing from the graph")
+			}
+		})
 	}
 }

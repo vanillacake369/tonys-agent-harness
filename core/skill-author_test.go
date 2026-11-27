@@ -81,10 +81,17 @@ func TestSkillAuthoringIntegration(t *testing.T) {
 
 func TestSkillValidationWithoutCheckoutIntegration(t *testing.T) {
 	integrationOnly(t)
+
+	// GIVEN a valid skill draft and no Harness checkout.
 	root := temp(t)
 	app := NewApplication()
 	path, err := app.ScaffoldSkill("skill/skl-pre-fixture-ljh", root)
 	must(t, err)
 	t.Setenv("HARNESS_REPO", filepath.Join(root, "absent-checkout"))
-	must(t, app.ValidateSkill(path))
+
+	// WHEN the standalone validator runs.
+	err = app.ValidateSkill(path)
+
+	// THEN the draft passes using the embedded validator.
+	must(t, err)
 }

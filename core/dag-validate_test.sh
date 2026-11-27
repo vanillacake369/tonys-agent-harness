@@ -16,8 +16,16 @@ read_json() {
 
 reject() {
   local label=$1 filter=$2 expected=${3:-}
+  # GIVEN a copy of the review DAG with one altered contract condition.
   jq "$filter" "$fixture/base.json" > "$fixture/$label.yaml"
-  if bash "$validator" "$fixture/$label.yaml" "$schema" "$root/tests/fixtures/review" > "$fixture/$label.out" 2>&1; then
+
+  # WHEN the altered DAG is validated.
+  local status=0
+  bash "$validator" "$fixture/$label.yaml" "$schema" "$root/tests/fixtures/review" > "$fixture/$label.out" 2>&1 ||
+    status=$?
+
+  # THEN validation fails with the expected contract diagnostic.
+  if [[ "$status" == 0 ]]; then
     printf 'DAG_NEGATIVE_FAILED=%s\n' "$label" >&2
     exit 1
   fi
@@ -27,9 +35,14 @@ reject() {
   fi
 }
 
-bash "$validator" "$manifest" "$schema" "$root/tests/fixtures/review" > "$fixture/valid.out"
-grep -q '^DAG_CONTRACT=PASS (review)' "$fixture/valid.out"
+# GIVEN the unchanged review DAG and its schema.
 read_json
+
+# WHEN the review DAG is validated.
+bash "$validator" "$manifest" "$schema" "$root/tests/fixtures/review" > "$fixture/valid.out"
+
+# THEN the validator accepts the contract for the expected source.
+grep -q '^DAG_CONTRACT=PASS (review)' "$fixture/valid.out"
 jq -e '.source == "capability/dag/dag-review/SKILL.md"' "$fixture/base.json" >/dev/null
 
 # Production regression caught: a mutating remediation silently skips approval.

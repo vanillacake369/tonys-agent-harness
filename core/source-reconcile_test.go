@@ -183,6 +183,7 @@ func TestSourceCachePruneRejectsUnexpectedEntry(t *testing.T) {
 }
 
 func TestReviewedSourceDigestControlsOfflineResolution(t *testing.T) {
+	// GIVEN a cached source tree and its reviewed digest.
 	c := fixtureConfig(t)
 	const entry = `{"url":"https://github.com/example/fixture","id":"fixture","path":"skills/fixture",` +
 		`"rev":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`
@@ -193,21 +194,49 @@ func TestReviewedSourceDigestControlsOfflineResolution(t *testing.T) {
 	must(t, sourceCacheSave(c, s, tree))
 	content, err := digest(tree)
 	must(t, err)
-	reviewed := func(digest string) source {
+	reviewed := func(t *testing.T, digest string) source {
+		t.Helper()
 		var pinned source
 		doc := strings.TrimSuffix(entry, "}") + `,"reviewed_tree_sha256":"` + digest + `"}`
 		must(t, json.Unmarshal([]byte(doc), &pinned))
 		return pinned
 	}
-	must(t, sourceResolve(c, reviewed(content), filepath.Join(c.state, "offline")))
-	err = sourceResolve(c, reviewed(strings.Repeat("b", 64)), filepath.Join(c.state, "unapproved"))
-	if err == nil || exists(filepath.Join(c.state, "unapproved")) {
-		t.Fatal("cache content outside the reviewed digest was accepted")
-	}
+	t.Run("matching digest", func(t *testing.T) {
+		// GIVEN the pin matches the cached content.
+		pin := reviewed(t, content)
+		target := filepath.Join(c.state, "offline")
+
+		// WHEN the source is resolved offline.
+		err := sourceResolve(c, pin, target)
+
+		// THEN the exact cached skill is returned.
+		must(t, err)
+		skill, err := readRegular(filepath.Join(target, "SKILL.md"))
+		must(t, err)
+		if string(skill) != "fixture" {
+			t.Fatalf("offline resolution returned %q", skill)
+		}
+	})
+
+	t.Run("different digest", func(t *testing.T) {
+		// GIVEN the reviewed pin describes different content.
+		pin := reviewed(t, strings.Repeat("b", 64))
+		target := filepath.Join(c.state, "unapproved")
+
+		// WHEN the source is resolved from its cache.
+		err := sourceResolve(c, pin, target)
+
+		// THEN the mismatch is rejected before any skill is projected.
+		if err == nil || !strings.Contains(err.Error(), "differs from the reviewed digest") || exists(target) {
+			t.Fatalf("mismatched source was not rejected cleanly: %v", err)
+		}
+	})
 }
 
 func TestVaultSkillKeepsLocalOriginIntegration(t *testing.T) {
 	integrationOnly(t)
+
+	// GIVEN a vault skill has a standalone provenance file.
 	c := fixtureConfig(t)
 	fixtureTree(t, c.workspace)
 	dir := filepath.Join(c.workspace, "skill/local")
@@ -216,7 +245,11 @@ func TestVaultSkillKeepsLocalOriginIntegration(t *testing.T) {
 			"```json composition\n{\"requires\":[],\"hints\":[]}\n```\n")
 	put(t, filepath.Join(dir, "source-provenance.json"),
 		`{"source":"fixture","revision":"old","path":"skill/local","content_sha256":"fixture"}`)
+
+	// WHEN the vault tree is validated.
 	nodes, err := validate(c, c.workspace)
+
+	// THEN source identity comes from the validated origin.
 	must(t, err)
 	if nodes["local"].Origin != "private" || nodes["local"].Provenance != nil {
 		t.Fatal("a workspace file changed the validated source identity")
