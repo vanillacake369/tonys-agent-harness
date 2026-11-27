@@ -1,6 +1,8 @@
 package core
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -11,8 +13,59 @@ import (
 	"syscall"
 )
 
+func workspaceBasePath(c config) string {
+	return filepath.Join(c.state, "workspace.base")
+}
+
+func currentArchiveFingerprint(c config) (string, error) {
+	if !exists(c.archive) {
+		return "absent", nil
+	}
+	cipher, err := readRegular(c.archive)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(cipher)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func writeWorkspaceBase(c config, fingerprint string) error {
+	return atomicWrite(workspaceBasePath(c), []byte(fingerprint+"\n"))
+}
+
+func verifyArchiveFingerprint(c config, fingerprint string) error {
+	current, err := currentArchiveFingerprint(c)
+	if err != nil {
+		return err
+	}
+	if fingerprint != current {
+		return errors.New("vault changed since workspace opened; preserve workspace and reconcile before applying")
+	}
+	return nil
+}
+
+func checkWorkspaceBase(c config) (string, error) {
+	data, err := readRegular(workspaceBasePath(c))
+	baseline := "absent"
+	if os.IsNotExist(err) {
+		if exists(c.archive) {
+			return "", errors.New("workspace baseline missing; preserve workspace and reconcile it before applying")
+		}
+		// 확인 당시 Vault가 없었다는 사실을 기록해 새 Vault를 기준으로 채택하지 않는다.
+		if err = writeWorkspaceBase(c, baseline); err != nil {
+			return "", err
+		}
+	} else if err != nil {
+		return "", err
+	} else {
+		baseline = strings.TrimSpace(string(data))
+	}
+	return baseline, verifyArchiveFingerprint(c, baseline)
+}
+
 type config struct {
-	repo, state, workspace, runtime, archive, key string
+	repo, state, workspace, runtime, archive, key, validatorDir string
+	imports                                                     map[string]provenance
 }
 
 // 체크아웃과 평문 저장 경계를 분리하고 사용자 전용 디렉터리를 확보한다.
@@ -20,27 +73,35 @@ func privateDir(path string) error {
 	if err := os.MkdirAll(path, 0700); err != nil {
 		return err
 	}
+	return privateDirCheck(path)
+}
+
+func privateDirCheck(path string) error {
 	info, err := os.Lstat(path)
 	if err != nil {
 		return err
+	}
+	var unsafe = errors.New("unsafe private directory; verify ownership, symlinks and permissions (must be 0700)")
+	if !info.IsDir() || info.Mode().Perm() != 0700 || info.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) {
+		return unsafe
 	}
 	real, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		return err
 	}
-	if !info.IsDir() || info.Mode().Perm() != 0700 || real != path ||
-		info.Sys().(*syscall.Stat_t).Uid != uint32(os.Getuid()) {
-		return errors.New("unsafe private directory; verify ownership, symlinks and permissions (must be 0700)")
+	if real != path {
+		return unsafe
 	}
 	return nil
 }
 
 // 조회 명령은 없는 경로를 만들지 않는다.
 func existingPrivateDir(path string) error {
-	if !exists(path) {
+	err := privateDirCheck(path)
+	if os.IsNotExist(err) {
 		return nil
 	}
-	return privateDir(path)
+	return err
 }
 
 func exists(path string) bool { _, err := os.Lstat(path); return !os.IsNotExist(err) }
@@ -105,7 +166,23 @@ func operationLock(c config) (*os.File, error) {
 	if err := privateDir(c.state); err != nil {
 		return nil, err
 	}
-	path := filepath.Join(c.state, "operation.lock")
+	return openOperationLock(filepath.Join(c.state, "operation.lock"))
+}
+
+// 작업 공간 잠금 다음에 획득한다. 암호문을 교체해도 잠금의 inode를 유지한다.
+func vaultOperationLock(c config) (*os.File, error) {
+	parent := filepath.Dir(c.archive)
+	real, err := filepath.EvalSymlinks(parent)
+	if err != nil {
+		return nil, err
+	}
+	if parent != real {
+		return nil, errors.New("symlink vault parent")
+	}
+	return openOperationLock(filepath.Join(parent, ".harness-vault-"+filepath.Base(c.archive)+".lock"))
+}
+
+func openOperationLock(path string) (*os.File, error) {
 	fd, err := syscall.Open(path, syscall.O_CREAT|syscall.O_RDWR|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0600)
 	if err != nil {
 		return nil, err
@@ -116,7 +193,8 @@ func operationLock(c config) (*os.File, error) {
 		f.Close()
 		return nil, err
 	}
-	if !info.Mode().IsRegular() || info.Mode().Perm() != 0600 || info.Sys().(*syscall.Stat_t).Nlink != 1 {
+	stat := info.Sys().(*syscall.Stat_t)
+	if !info.Mode().IsRegular() || info.Mode().Perm() != 0600 || stat.Nlink != 1 || stat.Uid != uint32(os.Getuid()) {
 		f.Close()
 		return nil, errors.New("unsafe operation lock")
 	}
@@ -186,7 +264,52 @@ func repositoryRoot(cwd string) (string, error) {
 			break
 		}
 	}
-	return "", errors.New("repository not found; set HARNESS_REPO or use --repo")
+	path, err := defaultRepositoryPath()
+	if err != nil {
+		return "", err
+	}
+	data, err := readRegular(path)
+	if os.IsNotExist(err) {
+		return "", errors.New("repository not found; run harness setup --repo PATH")
+	}
+	if err != nil {
+		return "", err
+	}
+	repo := string(data)
+	if !filepath.IsAbs(repo) || filepath.Clean(repo) != repo {
+		return "", errors.New("invalid default checkout; run harness setup --repo PATH")
+	}
+	return repo, nil
+}
+
+func defaultRepositoryPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".config", "tonys-agent-harness", "default-checkout"), nil
+}
+
+/*
+사용자가 선택한 체크아웃만 저장한다.
+설정의 유효성을 확인한 후 원자적으로 교체하여 다른 호출이 중간 값을 읽지 않게 한다.
+*/
+func SetupRepository() error {
+	c, err := loadConfig()
+	if err != nil {
+		return err
+	}
+	if _, err = readStatus(c); err != nil {
+		return err
+	}
+	path, err := defaultRepositoryPath()
+	if err != nil {
+		return err
+	}
+	if err = privateDir(filepath.Dir(path)); err != nil {
+		return err
+	}
+	return atomicWrite(path, []byte(c.repo))
 }
 
 type SourceStatus struct {
@@ -255,14 +378,31 @@ func readStatus(c config) (StatusReport, error) {
 	if err != nil {
 		return r, err
 	}
-	r.Next = providerNext(r.Providers, defaultProvider)
-	if !r.ArchiveExists && !r.WorkspaceExists || r.LegacyPlaintext {
-		r.Next = "harness config init PATH or empty"
-	}
-	if r.WorkspaceExists && !r.LegacyPlaintext {
-		r.Next = "harness config apply"
-	}
+	r.Next = statusNext(r, exists(c.runtime), defaultProvider)
 	return r, nil
+}
+
+/*
+복원과 편집 상태를 연결 안내보다 먼저 확인한다.
+파일 존재 여부만 관찰하므로 동기화 완료를 선언하지 않는다.
+*/
+func statusNext(r StatusReport, runtimeDirectory bool, defaultProvider string) string {
+	switch {
+	case r.LegacyPlaintext:
+		return "inspect legacy plaintext before migration"
+	case !r.ArchiveExists && runtimeDirectory:
+		return "restore the existing encrypted Vault"
+	case r.ArchiveExists && !r.KeyExists:
+		return "restore the age key for this Vault"
+	case r.WorkspaceExists:
+		return "harness apply --dry-run"
+	case !r.ArchiveExists:
+		return "harness config init PATH or empty"
+	case !r.RuntimeExists:
+		return "harness apply"
+	default:
+		return providerNext(r.Providers, defaultProvider)
+	}
 }
 
 func sourceStatusRows(c config) ([]SourceStatus, error) {
@@ -306,7 +446,7 @@ func providerNext(rows []ProviderStatus, defaultProvider string) string {
 		case "MIGRATION_REQUIRED":
 			return "harness provider connect " + row.Name
 		case "DRIFTED", "BLOCKED":
-			return "harness config apply"
+			return "harness apply"
 		case "CONNECTED":
 			connected = true
 		}
@@ -314,5 +454,5 @@ func providerNext(rows []ProviderStatus, defaultProvider string) string {
 	if !connected {
 		return "harness provider connect " + defaultProvider
 	}
-	return "harness config apply --dry-run"
+	return ""
 }

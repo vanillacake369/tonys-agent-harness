@@ -363,7 +363,7 @@ func atomicWrite(path string, data []byte) (resultErr error) {
 후보 암호문을 실제 복호화하여 원본과 비교한다.
 검증을 통과한 후보만 기존 암호문을 원자적으로 교체한다.
 */
-func seal(c config, plain []byte) error {
+func seal(c config, plain []byte, baseline string) error {
 	cipher, err := sopsRun(c, plain, true)
 	if err != nil {
 		return err
@@ -374,6 +374,9 @@ func seal(c config, plain []byte) error {
 	}
 	if !bytes.Equal(plain, restored) {
 		return errors.New("round-trip mismatch")
+	}
+	if err = verifyArchiveFingerprint(c, baseline); err != nil {
+		return err
 	}
 	return atomicWrite(c.archive, cipher)
 }

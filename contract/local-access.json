@@ -1,1 +1,21 @@
-{"schema_version": 1, "tools": {}}
+{
+  "schema_version": 1,
+  "tools": {
+    "tool-git-evidence": {
+      "method": "script",
+      "availability": "Requires the bundled git-evidence script and an accessible Git checkout."
+    },
+    "tool-git-ljh": {
+      "method": "cli",
+      "availability": "Requires Git and read access to the requested checkout and revision."
+    },
+    "tool-req-ljh": {
+      "method": "provider",
+      "availability": "Requires an authenticated Atlassian MCP or an authorized Jira read-only client."
+    },
+    "tool-runtime-ljh": {
+      "method": "cli",
+      "availability": "Requires a local checkout, a compatible JDK, and the project's Gradle entry point."
+    }
+  }
+}

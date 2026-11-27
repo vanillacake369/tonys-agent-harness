@@ -20,6 +20,39 @@ stdout '"name":"codex","state":"DISABLED"'
 ! exec $HARNESS_BIN missing
 stderr '^BLOCKED: unknown command "missing" for "harness"'
 
+# Setup persists only the checkout selection. Status works from another directory.
+env HARNESS_REPO=
+! exec $HARNESS_BIN status
+stderr 'run harness setup --repo PATH'
+! exists home/.config
+exec $HARNESS_BIN setup --repo $WORK/repo
+exists home/.config/tonys-agent-harness/default-checkout
+exec $HARNESS_BIN status --format json
+stdout '"next_action":"harness config init PATH or empty"'
+! exists state
+! exists vault
+! exists config
+
+# Source pin requires explicit input; removed legacy names are absent from help.
+! exec $HARNESS_BIN source pin example ''
+stderr 'full reviewed revision required'
+! exists state
+exec $HARNESS_BIN source --help
+! stdout 'update'
+
+# The root help exposes lifecycle commands and the authoring group.
+exec $HARNESS_BIN edit --help
+stdout '--apply'
+exec $HARNESS_BIN skill new --help
+stdout 'new ID'
+exec $HARNESS_BIN config --help
+stdout 'graph'
+stdout 'init'
+stdout 'runtime'
+! stdout 'scaffold'
+! stdout 'workspace'
+! stdout 'apply'
+
 -- repo/core/environment-public.txt --
 fixture marker
 -- repo/provider/provider-catalog.json --

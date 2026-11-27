@@ -28,3 +28,9 @@ func (Application) ReadSources() ([]SourceStatus, error)                { return
 func (Application) PruneSourceCache(plan bool) (SourceCachePruneResult, error) {
 	return PruneSourceCache(plan)
 }
+
+func (Application) SetupRepository() error { return SetupRepository() }
+
+func (Application) EditWorkspace(target string, apply bool) error {
+	return EditWorkspace(target, apply)
+}

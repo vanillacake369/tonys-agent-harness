@@ -6,23 +6,28 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
 
 type source struct {
-	URL        string `json:"url"`
-	Revision   string `json:"rev"`
-	Path       string `json:"path"`
-	ID         string `json:"id"`
-	Collection bool   `json:"collection,omitempty"`
+	URL           string            `json:"url"`
+	Revision      string            `json:"rev"`
+	Path          string            `json:"path"`
+	ID            string            `json:"id"`
+	Collection    bool              `json:"collection,omitempty"`
+	Phases        map[string]string `json:"phases"`
+	SelectByPhase bool              `json:"select_by_phase,omitempty"`
+	ReviewedTree  string            `json:"reviewed_tree_sha256,omitempty"`
 }
 
-// 기존 Vault의 provenance는 읽기 호환성만 유지한다.
+// Source 투영기가 생성한 출처를 Runtime에 기록한다.
 type provenance struct {
 	Source   string `json:"source"`
 	Revision string `json:"revision"`
@@ -55,12 +60,16 @@ func sourcesRead(c config) (map[string]source, error) {
 	}
 	for name, s := range sources {
 		var invalid = !idValid(name) || !idValid(s.ID) || !safeRelative(s.Path) ||
-			(!s.Collection && filepath.Base(s.Path) != s.ID) || !githubURLPattern.MatchString(s.URL)
+			(!s.Collection && filepath.Base(s.Path) != s.ID) || !githubURLPattern.MatchString(s.URL) ||
+			!s.validSelection()
 		if invalid {
 			return nil, errors.New("invalid source catalog")
 		}
 		if s.Revision != "" && !s.valid() {
 			return nil, errors.New("invalid source revision")
+		}
+		if s.ReviewedTree != "" && (s.Revision == "" || !sourceCacheNamePattern.MatchString(s.ReviewedTree)) {
+			return nil, errors.New("invalid reviewed source digest")
 		}
 	}
 	return sources, nil
@@ -70,14 +79,31 @@ func (s source) valid() bool {
 	return revisionPattern.MatchString(s.Revision) && safeRelative(s.Path) && idValid(s.ID)
 }
 
-func provenanceRead(path string) (provenance, error) {
-	var v provenance
-	var b, err = readRegular(filepath.Join(path, "source-provenance.json"))
-	if err != nil {
-		return v, err
+func (s source) validSelection() bool {
+	if !s.SelectByPhase {
+		return true
 	}
-	err = json.Unmarshal(b, &v)
-	return v, err
+	if !s.Collection || len(s.Phases) == 0 {
+		return false
+	}
+	for id, phase := range s.Phases {
+		if !idValid(id) || (phase != "pre" && phase != "mid" && phase != "post") {
+			return false
+		}
+	}
+	return true
+}
+
+// 검토 대상으로 지정한 디렉터리만 archive에 포함해 미선택 파일을 가져오지 않는다.
+func (s source) archivePaths() []string {
+	if !s.SelectByPhase {
+		return []string{s.Path}
+	}
+	var paths []string
+	for _, id := range slices.Sorted(maps.Keys(s.Phases)) {
+		paths = append(paths, filepath.ToSlash(filepath.Join(s.Path, id)))
+	}
+	return paths
 }
 
 /*
@@ -85,7 +111,8 @@ Git 인증은 사용자 credential helper에 위임한다. 대화형 인증이�
 원격 오류 출력은 허용하지 않는다. 회사 인증은 gh auth setup-git으로 설정한다.
 */
 func sourceGit(args ...string) ([]byte, error) {
-	var options = []string{"-c", "protocol.file.allow=never", "-c", "protocol.ext.allow=never",
+	var options = []string{"-c", "protocol.allow=never", "-c", "protocol.https.allow=always",
+		"-c", "protocol.file.allow=never", "-c", "protocol.ext.allow=never",
 		"-c", "core.hooksPath=/dev/null", "-c", "credential.interactive=false"}
 	var ctx, cancel = context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -129,7 +156,7 @@ func sourceGitEnv() []string {
 Git checkout/filter/hook 실행 없이 archive를 기존 안전한 unpack으로 처리한다.
 */
 func sourceFetch(c config, s source, target string) (resultErr error) {
-	if !s.valid() {
+	if !s.valid() || !s.validSelection() {
 		return errors.New("invalid source pin")
 	}
 	var tmp, err = os.MkdirTemp(c.state, "stage-source-")
@@ -148,7 +175,8 @@ func sourceFetch(c config, s source, target string) (resultErr error) {
 	if verifyErr != nil || strings.TrimSpace(string(out)) != s.Revision {
 		return errors.New("source revision mismatch")
 	}
-	var data, archiveErr = sourceGit("-C", gitDir, "archive", "--format=tar", s.Revision, "--", s.Path)
+	var args = []string{"-C", gitDir, "archive", "--format=tar", s.Revision, "--"}
+	var data, archiveErr = sourceGit(append(args, s.archivePaths()...)...)
 	if archiveErr != nil {
 		return errors.New("cannot archive selected source path at reviewed revision; check source path and revision")
 	}
@@ -215,7 +243,7 @@ func sourcesProject(c config, root string) error {
 			continue
 		}
 		if err = sourceProject(c, root, name, s); err != nil {
-			return err
+			return fmt.Errorf("source %s projection failed: %s", name, PublicError(err))
 		}
 	}
 	return nil
@@ -223,14 +251,14 @@ func sourcesProject(c config, root string) error {
 
 func sourceProject(c config, root, name string, s source) (resultErr error) {
 	if !s.Collection {
-		target := filepath.Join(root, "skill", s.ID)
-		if exists(target) {
-			return errors.New("source ID collision; remove local duplicate manually or unpin source")
-		}
-		if err := sourceResolve(c, s, target); err != nil {
+		target, err := s.importTarget(root, name, s.ID)
+		if err != nil {
 			return err
 		}
-		return sourceProvenance(target, name, s, s.Path)
+		if err = sourceResolve(c, s, target); err != nil {
+			return err
+		}
+		return s.finishImport(c, target, name, s.Path)
 	}
 	tmp, err := os.MkdirTemp(c.state, "stage-collection-")
 	if err != nil {
@@ -252,35 +280,70 @@ func sourceProject(c config, root, name string, s source) (resultErr error) {
 		if !entry.IsDir() || !idValid(entry.Name()) {
 			return errors.New("invalid source collection entry")
 		}
-		if exists(filepath.Join(root, "skill", entry.Name())) {
-			return errors.New("source ID collision; remove local duplicate manually or unpin source")
+		target, err := s.importTarget(root, name, entry.Name())
+		if err != nil {
+			return err
 		}
-	}
-	for _, entry := range entries {
-		if entry.Type().IsRegular() {
-			continue
-		}
-		target := filepath.Join(root, "skill", entry.Name())
 		if err = copyTree(filepath.Join(tree, entry.Name()), target); err != nil {
 			return err
 		}
-		if err = sourceProvenance(target, name, s, filepath.ToSlash(filepath.Join(s.Path, entry.Name()))); err != nil {
+		if err = s.finishImport(c, target, name, filepath.ToSlash(filepath.Join(s.Path, entry.Name()))); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func sourceProvenance(target, name string, s source, path string) error {
+func (s source) importTarget(root, sourceName, original string) (string, error) {
+	phase := s.Phases[original]
+	if phase != "pre" && phase != "mid" && phase != "post" {
+		return "", fmt.Errorf("source %s skill %s requires an import phase (pre, mid, post)", sourceName, original)
+	}
+	id := "skl-" + phase + "-" + original + "-" + sourceName
+	if !idValid(id) {
+		return "", fmt.Errorf("invalid imported skill ID: %s", id)
+	}
+	target := filepath.Join(root, "skill", id)
+	if exists(target) {
+		return "", fmt.Errorf("source ID collision: %s", id)
+	}
+	return target, nil
+}
+
+/*
+검토된 Git 원본과 캐시는 그대로 두고 후보의 호출 이름만 변경한다.
+이름 변환에 실패하면 후보는 폐기되고 현재 Runtime은 유지된다.
+*/
+func (s source) finishImport(c config, target, name, path string) error {
+	err := validatorRun(c, "python3", "metadata-validate.py",
+		"import-name", filepath.Join(target, "SKILL.md"), filepath.Base(path), filepath.Base(target))
+	if err != nil {
+		return fmt.Errorf("could not set imported name for %s/%s", name, filepath.Base(path))
+	}
+	return sourceProvenance(c, target, name, s, path)
+}
+
+func sourceProvenance(c config, target, name string, s source, path string) error {
+	manifest := filepath.Join(target, "source-provenance.json")
+	if err := os.Remove(manifest); err != nil && !os.IsNotExist(err) {
+		return err
+	}
 	content, err := digest(target)
 	if err != nil {
 		return err
 	}
-	b, err := json.Marshal(provenance{Source: name, Revision: s.Revision, Path: path, Content: content})
+	entry := provenance{Source: name, Revision: s.Revision, Path: path, Content: content}
+	b, err := json.Marshal(entry)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(target, "source-provenance.json"), b, 0600)
+	if err = os.WriteFile(manifest, b, 0600); err != nil {
+		return err
+	}
+	if c.imports != nil {
+		c.imports[filepath.Base(target)] = entry
+	}
+	return nil
 }
 
 func pinSource(c config, args []string) (resultErr error) {
@@ -301,10 +364,18 @@ func pinSource(c config, args []string) (resultErr error) {
 		return err
 	}
 	defer cleanupPath(&resultErr, tmp)
-	if err = sourceResolve(c, s, filepath.Join(tmp, "skill")); err != nil {
+	if err = prepareValidators(&c, tmp); err != nil {
 		return err
 	}
-	if err = sourceCacheSave(c, s, filepath.Join(tmp, "skill")); err != nil {
+	tree := filepath.Join(tmp, "skill")
+	if err = sourceFetch(c, s, tree); err != nil {
+		return err
+	}
+	s.ReviewedTree, err = digest(tree)
+	if err != nil {
+		return err
+	}
+	if err = sourceCacheSave(c, s, tree); err != nil {
 		return err
 	}
 	sources[args[0]] = s
@@ -349,7 +420,7 @@ func sourceCandidates(c config, name string) error {
 		for _, row := range rows {
 			fmt.Printf("%s pinned=%t revision=%s\n", row.Name, row.Pinned, row.Revision)
 		}
-		fmt.Println("Next: harness source update NAME")
+		fmt.Println("Next: harness source check NAME")
 		return nil
 	}
 	sources, err := sourcesRead(c)
@@ -362,13 +433,14 @@ func sourceCandidates(c config, name string) error {
 	}
 	out, err := sourceGit("ls-remote", "--exit-code", s.URL, "HEAD")
 	if err != nil {
-		return err
+		return fmt.Errorf("source %s remote check failed: %s; verify Git credentials and repository access",
+			name, PublicError(err))
 	}
 	fields := strings.Fields(string(out))
 	if len(fields) != 2 {
 		return errors.New("invalid remote HEAD")
 	}
-	fmt.Printf("Candidate (unreviewed): %s\nReview before: harness source update %s %s\n", fields[0], name, fields[0])
+	fmt.Printf("Candidate (unreviewed): %s\nReview before: harness source pin %s %s\n", fields[0], name, fields[0])
 	return nil
 }
 
@@ -378,36 +450,86 @@ func sourceCachePath(c config, s source) string {
 	if s.Collection {
 		key += "\ncollection"
 	}
+	if s.SelectByPhase {
+		key += "\nselected\n" + strings.Join(s.archivePaths(), "\n")
+	}
 	return filepath.Join(c.state, "source-cache", hashBytes([]byte(key)))
 }
 
 func sourceResolve(c config, s source, target string) error {
-	var cache = sourceCachePath(c, s)
+	cache := sourceCachePath(c, s)
 	if !exists(cache) {
-		return sourceFetch(c, s, target)
+		fetch := func(tree string) error { return sourceFetch(c, s, tree) }
+		if s.ReviewedTree == "" {
+			return fetch(target)
+		}
+		return sourceSnapshot(c, target, s.ReviewedTree, "", fetch)
 	}
-	if err := privateDir(cache); err != nil {
-		return err
-	}
-	var expected, err = readRegular(filepath.Join(cache, "digest"))
+	cached, err := sourceCacheDigest(cache)
 	if err != nil {
 		return err
 	}
-	var tree = filepath.Join(cache, "skill")
+	copyCached := func(tree string) error { return copyTree(filepath.Join(cache, "skill"), tree) }
+	return sourceSnapshot(c, target, s.ReviewedTree, cached, copyCached)
+}
+
+// 캐시와 네트워크에서 복사한 후보 자체의 digest를 확인한 뒤 후보 경로를 공개한다.
+func sourceSnapshot(c config, target, reviewed, cached string, materialize func(string) error) (resultErr error) {
+	stage, err := os.MkdirTemp(c.state, "stage-reviewed-source-")
+	if err != nil {
+		return err
+	}
+	defer cleanupPath(&resultErr, stage)
+	tree := filepath.Join(stage, "skill")
+	if err = materialize(tree); err != nil {
+		return err
+	}
+	if err = verifySourceTree(tree, reviewed, cached); err != nil {
+		return err
+	}
+	if exists(target) {
+		return errors.New("source snapshot target already exists")
+	}
+	return os.Rename(tree, target)
+}
+
+func sourceCacheDigest(cache string) (string, error) {
+	if err := privateDirCheck(cache); err != nil {
+		return "", err
+	}
+	expected, err := readRegular(filepath.Join(cache, "digest"))
+	if err != nil {
+		return "", err
+	}
+	cached := strings.TrimSpace(string(expected))
+	if !sourceCacheNamePattern.MatchString(cached) {
+		return "", errors.New("invalid source cache digest")
+	}
+	return cached, nil
+}
+
+func verifySourceTree(tree, reviewed, cached string) error {
 	actual, err := digest(tree)
 	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(string(expected)) != actual {
+	if reviewed != "" && reviewed != actual {
+		return errors.New("source tree differs from the reviewed digest")
+	}
+	if cached != "" && cached != actual {
 		return errors.New("source cache integrity failure; remove cache manually")
 	}
-	return copyTree(tree, target)
+	return nil
 }
 
 func sourceCacheSave(c config, s source, tree string) (resultErr error) {
 	var cache = sourceCachePath(c, s)
 	if exists(cache) {
-		return nil
+		cached, err := sourceCacheDigest(cache)
+		if err != nil {
+			return err
+		}
+		return verifySourceTree(filepath.Join(cache, "skill"), s.ReviewedTree, cached)
 	}
 	var parent = filepath.Dir(cache)
 	if err := privateDir(parent); err != nil {
@@ -421,9 +543,12 @@ func sourceCacheSave(c config, s source, tree string) (resultErr error) {
 	if err = copyTree(tree, filepath.Join(tmp, "skill")); err != nil {
 		return err
 	}
-	content, err := digest(tree)
+	content, err := digest(filepath.Join(tmp, "skill"))
 	if err != nil {
 		return err
+	}
+	if s.ReviewedTree != "" && content != s.ReviewedTree {
+		return errors.New("source tree differs from the reviewed digest")
 	}
 	if err = os.WriteFile(filepath.Join(tmp, "digest"), []byte(content+"\n"), 0600); err != nil {
 		return err

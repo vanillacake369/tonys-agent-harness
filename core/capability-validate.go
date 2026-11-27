@@ -1,13 +1,14 @@
 package core
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -20,6 +21,7 @@ type node struct {
 	Requires   []string    `json:"requires"`
 	Hints      []string    `json:"hints"`
 	Content    string      `json:"content_sha256"`
+	Execution  *toolAccess `json:"execution,omitempty"`
 }
 
 type nodeJob struct {
@@ -48,18 +50,30 @@ func idValid(s string) bool { return len(s) <= 64 && idPattern.MatchString(s) }
 
 // 기존 엄격한 YAML/Tool 검증기를 임시 호환 계층으로 유지한다.
 // 검증 중 Skill 스크립트나 외부 네트워크는 실행하지 않는다.
-func contractCheck(c config, script string, args ...string) (resultErr error) {
-	cmd := exec.Command("bash", append([]string{filepath.Join(c.repo, "core", script)}, args...)...)
-	tmp, err := os.MkdirTemp(c.state, "stage-validator-")
-	if err != nil {
-		return err
-	}
-	defer cleanupPath(&resultErr, tmp)
-	cmd.Env = append(os.Environ(), "TMPDIR="+tmp)
-	if err := cmd.Run(); err != nil {
+func contractCheck(c config, script string, args ...string) error {
+	if err := validatorRun(c, "bash", script, args...); err != nil {
 		return errors.New(script + " failed (private details suppressed)")
 	}
 	return nil
+}
+
+// 후보와 단일 Skill 검사에서 같은 composition 문법을 사용한다.
+func compositionRead(doc []byte, expected int) (map[string][]string, error) {
+	blocks := compositionPattern.FindAllSubmatch(doc, -1)
+	if len(blocks) != expected {
+		return nil, errors.New("invalid composition block count")
+	}
+	if expected == 0 {
+		return nil, nil
+	}
+	var refs map[string][]string
+	if err := json.Unmarshal(blocks[0][1], &refs); err != nil {
+		return nil, errors.New("invalid composition JSON")
+	}
+	if len(refs) != 2 || refs["requires"] == nil || refs["hints"] == nil {
+		return nil, errors.New("invalid composition fields")
+	}
+	return refs, nil
 }
 
 func nodeRead(c config, root, kind, name, path string) (node, error) {
@@ -76,45 +90,30 @@ func nodeRead(c config, root, kind, name, path string) (node, error) {
 			return n, err
 		}
 	}
-	blocks := compositionPattern.FindAllSubmatch(data, -1)
-	external := false
-	if kind == "skill" {
-		p, e := provenanceRead(filepath.Dir(path))
-		external = e == nil && p.Content != ""
-		if e == nil {
-			n.Provenance = &p
-		}
-	}
-	if external {
+	imported, external := c.imports[name]
+	if kind == "skill" && external {
 		n.Origin = "external"
+		n.Provenance = &imported
 	}
 	expected := 1
 	if kind == "tool" || external {
 		expected = 0
 	}
-	if len(blocks) != expected {
-		return n, errors.New("invalid composition block count")
+	refs, err := compositionRead(data, expected)
+	if err != nil {
+		return n, err
 	}
 	if expected == 1 {
-		var refs map[string][]string
-		if err = json.Unmarshal(blocks[0][1], &refs); err != nil {
-			return n, err
-		}
-		if len(refs) != 2 || refs["requires"] == nil || refs["hints"] == nil {
-			return n, errors.New("invalid composition fields")
-		}
 		n.Requires = refs["requires"]
 		n.Hints = refs["hints"]
 	}
 	var hasDAG = kind == "dag" && exists(filepath.Join(filepath.Dir(path), "DAG.yaml"))
 	if hasDAG {
-		dir := filepath.Dir(path)
-		if err = contractCheck(
-			c, "dag-validate.sh", filepath.Join(dir, "DAG.yaml"),
-			filepath.Join(dir, "dag-contract.schema.json"), filepath.Dir(root),
-		); err != nil {
+		refs, err := dagStageReferences(c, root, filepath.Dir(path))
+		if err != nil {
 			return n, err
 		}
+		n.Hints = mergeDAGReferences(n, refs)
 	}
 	if kind == "tool" && name == "tool-git-evidence" {
 		if err = contractCheck(
@@ -151,7 +150,77 @@ func nodesRead(c config, root string) (map[string]node, error) {
 	if len(nodes) == 0 {
 		return nil, errors.New("empty capability tree")
 	}
-	return nodes, relationsValidate(nodes)
+	if err := relationsValidate(nodes); err != nil {
+		return nil, err
+	}
+	return nodes, toolAccessRead(c, nodes)
+}
+
+func dagStageReferences(c config, root, dir string) (_ []string, resultErr error) {
+	if c.validatorDir == "" {
+		stage, err := os.MkdirTemp(c.state, "stage-dag-")
+		if err != nil {
+			return nil, err
+		}
+		defer cleanupPath(&resultErr, stage)
+		if err = prepareValidators(&c, stage); err != nil {
+			return nil, err
+		}
+	}
+	legacy := filepath.Join(dir, "dag-contract.schema.json")
+	if !exists(legacy) {
+		legacy = ""
+	}
+	var output bytes.Buffer
+	manifest := filepath.Join(dir, "DAG.yaml")
+	schema := filepath.Join(c.validatorDir, "dag-contract.schema.json")
+	err := validatorStart(c, "bash", "dag-validate.sh", &output,
+		manifest, schema, filepath.Dir(root), "references", legacy)
+	if err != nil {
+		return nil, errors.New("DAG contract invalid (private details suppressed)")
+	}
+	var refs []string
+	err = json.Unmarshal(output.Bytes(), &refs)
+	return refs, err
+}
+
+func mergeDAGReferences(n node, refs []string) []string {
+	for _, ref := range refs {
+		if !slices.Contains(n.Requires, ref) && !slices.Contains(n.Hints, ref) {
+			n.Hints = append(n.Hints, ref)
+		}
+	}
+	return n.Hints
+}
+
+type toolAccess struct {
+	Method       string `json:"method"`
+	Availability string `json:"availability"`
+}
+
+func toolAccessRead(c config, nodes map[string]node) error {
+	data, err := readRegular(filepath.Join(c.repo, "contract/local-access.json"))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var catalog struct {
+		Version int                   `json:"schema_version"`
+		Tools   map[string]toolAccess `json:"tools"`
+	}
+	if err = json.Unmarshal(data, &catalog); err != nil || catalog.Version != 1 {
+		return errors.New("invalid local tool access catalog")
+	}
+	for id, access := range catalog.Tools {
+		n, ok := nodes[id]
+		if ok && n.Kind == "tool" {
+			n.Execution = &access
+			nodes[id] = n
+		}
+	}
+	return nil
 }
 
 func nodeJobs(root string) ([]nodeJob, error) {
@@ -279,7 +348,7 @@ func relationAllowed(from, to string) bool {
 	case "skill":
 		return to == "tool"
 	case "dag":
-		return to == "skill"
+		return to == "skill" || to == "tool"
 	case "agent":
 		return to == "tool" || to == "skill" || to == "dag" || to == "agent"
 	default:
@@ -373,8 +442,7 @@ func catalogValidate(c config, root string) error {
 	if !exists(filepath.Join(root, "catalog.json")) {
 		return nil
 	}
-	var cmd = exec.Command("python3", filepath.Join(c.repo, "core/metadata-validate.py"), "catalog", root)
-	if err := cmd.Run(); err != nil {
+	if err := validatorRun(c, "python3", "metadata-validate.py", "catalog", root); err != nil {
 		return errors.New("catalog validation failed; regenerate catalog and retry")
 	}
 	return nil

@@ -9,7 +9,12 @@ cp -R "$sample" "$fixture/harness-smoke"
 chmod -R u+w "$fixture"
 bash "$validator" "$fixture/harness-smoke"
 expect_failure() {
-  if bash "$validator" "$fixture/harness-smoke" > "$fixture/log" 2>&1; then
+  # WHEN the prepared skill is validated.
+  local status=0
+  bash "$validator" "$fixture/harness-smoke" > "$fixture/log" 2>&1 || status=$?
+
+  # THEN validation fails with the expected diagnostic.
+  if [[ "$status" == 0 ]]; then
     echo "unexpected validation success: $1" >&2
     exit 1
   fi
@@ -60,4 +65,15 @@ expect_failure INVALID_SKILL
 printf '%s\n' \
   '---' 'name: harness-smoke' 'description: test' 'allowed-tools: 42' \
   '---' '# Fixture' > "$fixture/harness-smoke/SKILL.md"
+expect_failure INVALID_SKILL
+
+# GIVEN a skill references an existing file outside its root.
+cp "$sample/SKILL.md" "$fixture/harness-smoke/SKILL.md"
+printf '\n[crosses the root](../other.md)\n' >> "$fixture/harness-smoke/SKILL.md"
+touch "$fixture/other.md"
+expect_failure INVALID_RESOURCE
+
+# GIVEN the frontmatter declares the description twice.
+printf '%s\n' '---' 'name: harness-smoke' 'description: test' 'description: duplicate' '---' '# Fixture' \
+  > "$fixture/harness-smoke/SKILL.md"
 expect_failure INVALID_SKILL

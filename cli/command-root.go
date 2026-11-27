@@ -27,6 +27,8 @@ func Run(application core.Application, commands []*cobra.Command, args []string)
 		},
 	}
 	root.PersistentFlags().StringVar(&repo, "repo", "", "Configuration checkout directory")
+	root.CompletionOptions.DisableDefaultCmd = true
+	root.AddCommand(commandCompletion(), CommandStatus(application))
 	root.AddCommand(commands...)
 	commandWrap(root, &code)
 	root.SetArgs(args)

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skill / Publish Meeting Minutes to Confluence"
+  short_description: "Publish meeting minutes and verify the Confluence page"
+  default_prompt: "Use $skl-post-confluence-meeting-publish-ljh to publish these finalized minutes under the specified Confluence folder."

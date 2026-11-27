@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skill / Nix Complexity Assessment"
+  short_description: "Measure Nix structure before and after a change"
+  default_prompt: "Use $skl-pre-nix-complexity-ljh to measure Nix complexity and explain the limits of the result."

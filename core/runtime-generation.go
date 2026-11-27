@@ -11,6 +11,11 @@ import (
 	"strings"
 )
 
+const (
+	runtimeGraphFile    = ".capability-graph.json"
+	runtimeGraphVersion = 3
+)
+
 func hashBytes(b []byte) string { return fmt.Sprintf("%x", sha256.Sum256(b)) }
 
 // Runtime 후보는 외부 Nix Store가 아닌 사용자 전용 디렉터리에서 구성한다.
@@ -30,12 +35,16 @@ func runtimeBuild(c config, root, target string, nodes map[string]node) error {
 			return err
 		}
 	}
-	graph := map[string]any{"schema_version": 3, "scope": "bundle", "capabilities": nodes}
+	// Provider가 같은 형식으로 스킬을 표시하도록 Runtime 사본의 UI 필드만 채운다.
+	if err := validatorRun(c, "python3", "metadata-validate.py", "runtime-display", target); err != nil {
+		return fmt.Errorf("could not normalize runtime skill interfaces: %w", err)
+	}
+	graph := map[string]any{"schema_version": runtimeGraphVersion, "scope": "bundle", "capabilities": nodes}
 	b, err := json.MarshalIndent(graph, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(target, ".capability-graph.json"), b, 0600)
+	return os.WriteFile(filepath.Join(target, runtimeGraphFile), b, 0600)
 }
 
 func runtimeNode(c config, root, target string, n node, description string) error {
@@ -113,6 +122,8 @@ func runtimeAgentProfile(c config, target, id, description string) error {
 	body += fmt.Sprintf("Read the [role profile](<%s>) and [policy](<%s>).\n", profile, policy)
 	body += "This is a role skill, not a native subagent. " +
 		"Delegate only when the provider supports it and authority permits.\n"
+	body += "Resolve required capabilities for the task, then use optional hints where relevant. " +
+		"Verify the actual tool or provider before claiming execution.\n"
 	body += "Otherwise use sequential role passes and disclose that limitation.\n"
 	return os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(body), 0600)
 }
@@ -155,9 +166,9 @@ func livePath(c config) (string, error) {
 		return path, err
 	}
 	if !exists(path) {
-		return "", errors.New("dangling runtime generation; run harness config runtime reset then harness config apply")
+		return "", errors.New("dangling runtime generation; run harness config runtime reset then harness apply")
 	}
-	if err = privateDir(path); err != nil {
+	if err = privateDirCheck(path); err != nil {
 		return "", err
 	}
 	return path, nil
@@ -300,7 +311,7 @@ func inventory(path string) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	b, err := readRegular(filepath.Join(path, ".capability-graph.json"))
+	b, err := readRegular(filepath.Join(path, runtimeGraphFile))
 	if err != nil {
 		return nil, err
 	}
@@ -318,7 +329,7 @@ func inventory(path string) (map[string]string, error) {
 		result[id] = hashBytes(data)
 	}
 	for _, entry := range entries {
-		if entry.Name() == ".capability-graph.json" || entry.Name() == ".capability" {
+		if entry.Name() == runtimeGraphFile || entry.Name() == ".capability" {
 			continue
 		}
 		if !entry.IsDir() {

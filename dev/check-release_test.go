@@ -2,6 +2,7 @@ package dev
 
 import (
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -9,7 +10,7 @@ import (
 func TestReleaseContract(t *testing.T) {
 	version, err := os.ReadFile("../cli/version.txt")
 	must(t, err)
-	if string(version) != "0.0.1\n" {
+	if !regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+\n?$`).Match(version) {
 		t.Fatalf("unexpected release version %q", version)
 	}
 
@@ -25,7 +26,7 @@ func TestReleaseContract(t *testing.T) {
 
 	workflow, err := os.ReadFile("../.github/workflows/release.yml")
 	must(t, err)
-	for _, contract := range []string{"tags:", "v*", "just", "gh release create"} {
+	for _, contract := range []string{"tags:", "v*", "just verify", "gh release create"} {
 		if !strings.Contains(string(workflow), contract) {
 			t.Errorf("release workflow missing %q", contract)
 		}
@@ -36,5 +37,12 @@ func TestReleaseContract(t *testing.T) {
 		if !strings.Contains(string(workflow), contract) {
 			t.Errorf("release workflow does not isolate publish permission: missing %q", contract)
 		}
+	}
+
+	script, err := os.ReadFile("build-release.sh")
+	must(t, err)
+	var portableChecksums = `(cd dist && sha256sum *.tar.gz >checksums.txt)`
+	if !strings.Contains(string(script), portableChecksums) {
+		t.Fatal("release checksums must use asset basenames")
 	}
 }

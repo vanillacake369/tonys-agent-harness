@@ -328,7 +328,7 @@ func connect(c config, args []string) error {
 	name := args[0]
 	live, err := livePath(c)
 	if err != nil || live == "" {
-		return errors.New("run harness config apply first")
+		return errors.New("run harness apply first")
 	}
 	link, err := providerLink(c, name)
 	if err != nil {
@@ -489,7 +489,7 @@ func providerReconcile(c config, links []string) error {
 			return err
 		}
 		if state != providerConnected {
-			return errors.New("provider reconciliation incomplete; retry harness config apply")
+			return errors.New("provider reconciliation incomplete; retry harness apply")
 		}
 	}
 	return nil

@@ -17,7 +17,9 @@ func main() {
 	application := core.NewApplication()
 	commands := []*cobra.Command{
 		config.Command(application), source.Command(application), provider.Command(application),
+		config.SkillCommand(application),
 	}
+	commands = append(commands, config.LifecycleCommands(application)...)
 	code, err := cli.Run(application, commands, os.Args[1:])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "BLOCKED:", core.PublicError(err))

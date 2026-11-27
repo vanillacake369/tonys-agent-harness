@@ -4,6 +4,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from textwrap import shorten
 
 import yaml
 
@@ -35,7 +36,125 @@ def require(condition):
         raise ValueError("invalid catalog metadata")
 
 
-def entry(root, path):
+def skill_structure(root, bundle):
+    try:
+        doc = (root / "SKILL.md").read_bytes().decode("utf-8")
+        first, _, rest = doc.partition("\n")
+        header, fence, body = rest.partition("\n---\n")
+        require(first == "---" and fence)
+        require(any(line != "---" and line.strip() for line in body.split("\n")))
+        data = yaml_read(header)
+        json.dumps(data, allow_nan=False)
+        require(isinstance(data, dict) and data.get("name") == root.name)
+        require(len(root.name) <= 64 and re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", root.name))
+        require(nonblank_text(data.get("description"), limit=1024))
+        for key, limit in (("compatibility", 500), ("license", None), ("allowed-tools", None)):
+            require(key not in data or nonblank_text(data[key], limit))
+        if "metadata" in data:
+            meta = data["metadata"]
+            require(isinstance(meta, dict) and all(isinstance(value, str) for value in meta.values()))
+    except (OSError, ValueError, TypeError, yaml.YAMLError):
+        sys.exit("INVALID_SKILL")
+    try:
+        skill_links(root, bundle)
+    except (OSError, ValueError, RuntimeError):
+        sys.exit("INVALID_RESOURCE")
+
+
+def nonblank_text(value, limit):
+    return isinstance(value, str) and bool(value.strip()) and (limit is None or len(value) <= limit)
+
+
+def skill_links(root, bundle):
+    root = root.resolve(strict=True)
+    policy = None
+    if bundle:
+        bundle = Path(bundle).resolve(strict=True)
+        require(len(root.relative_to(bundle).parts) >= 2)
+        policy_file = bundle / "POLICY.md"
+        if policy_file.is_file() and not policy_file.is_symlink():
+            policy = policy_file
+    pattern = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
+    for markdown in root.rglob("*.md"):
+        if not markdown.is_file():
+            continue
+        for target in pattern.findall(markdown.read_text(encoding="utf-8", errors="replace")):
+            if target.startswith(("https://", "http://", "mailto:", "#")):
+                continue
+            require(not target.startswith("/") and not any(c in target for c in ": %\\\n\r"))
+            link = (markdown.parent / target.split("#", 1)[0]).resolve(strict=True)
+            require(link == root or root in link.parents or link == policy)
+
+
+def import_name(path, original, imported):
+    doc = path.read_bytes().decode("utf-8")
+    require(doc.startswith("---\n"))
+    _, divider, content = doc.partition("\n")
+    metadata, fence, body = content.partition("\n---\n")
+    require(divider and fence and yaml_read(metadata)["name"] == original)
+    node = yaml.compose(metadata, Loader=UniqueLoader)
+    key, value = next((k, v) for k, v in node.value if k.value == "name")
+    require(isinstance(value, yaml.ScalarNode) and value.start_mark.index >= key.end_mark.index)
+    candidate = metadata[:value.start_mark.index] + imported + metadata[value.end_mark.index:]
+    before = yaml_read(metadata)
+    before["name"] = imported
+    require(yaml_read(candidate) == before)
+    path.write_bytes(("---\n" + candidate + fence + body).encode("utf-8"))
+
+
+def runtime_display(root):
+    skills = {doc.parent.name for doc in (root / ".capability/skill").glob("*/SKILL.md")}
+    files = set(root.glob("*/agents/openai.yaml"))
+    files.update(root / skill_id / "agents/openai.yaml" for skill_id in skills)
+    for path in sorted(files):
+        try:
+            text = path.read_bytes().decode("utf-8") if path.exists() else ""
+            data = yaml_read(text) if text.strip() else {}
+        except (ValueError, yaml.YAMLError):
+            # Leave unsupported vendor YAML intact.
+            continue
+        interface = data.get("interface", {}) if isinstance(data, dict) else None
+        if not isinstance(interface, dict):
+            continue
+        skill_id = path.parent.parent.name
+        if skill_id in skills and fill_runtime_skill_interface(path, data, interface):
+            continue
+        if interface.get("display_name") in (None, "", skill_id):
+            continue
+        doc = yaml.compose(text, Loader=UniqueLoader)
+        fields = next(value for key, value in doc.value if key.value == "interface")
+        key, value = next((key, value) for key, value in fields.value if key.value == "display_name")
+        start, end = value.start_mark.index, value.end_mark.index
+        require(isinstance(value, yaml.ScalarNode) and start >= key.end_mark.index)
+        newline = re.search(r"\r?\n$", text[start:end])
+        candidate = text[:start] + json.dumps(skill_id) + (newline[0] if newline else "") + text[end:]
+        data["interface"] = dict(interface, display_name=skill_id)
+        require(yaml_read(candidate) == data)
+        path.write_bytes(candidate.encode("utf-8"))
+
+
+def fill_runtime_skill_interface(path, data, interface):
+    fields = ("display_name", "short_description", "default_prompt")
+    if all(nonblank_text(interface.get(field), None) for field in fields):
+        return False
+    skill = path.parent.parent
+    result = dict(interface, display_name=skill.name)
+    if not nonblank_text(result.get("short_description"), None):
+        _, _, rest = (skill / "SKILL.md").read_text(encoding="utf-8").partition("\n")
+        header, fence, _ = rest.partition("\n---\n")
+        description = yaml_read(header).get("description", "") if fence else ""
+        short = shorten(description, width=64, placeholder="…")
+        result["short_description"] = short if len(short) >= 25 else "Use this skill for the matching task"
+    if not nonblank_text(result.get("default_prompt"), None):
+        result["default_prompt"] = f"Use ${skill.name} for this request."
+    data["interface"] = result
+    path.parent.mkdir(mode=0o700, exist_ok=True)
+    path.touch(mode=0o600, exist_ok=True)
+    path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    return True
+
+
+def entry(root, path, standalone=False):
     doc = path.read_text(encoding="utf-8")
     parts = doc.split("---", 2)
     require(len(parts) == 3 and parts[0] == "")
@@ -43,7 +162,11 @@ def entry(root, path):
     name = meta["name"]
     kind = meta["metadata"]["kind"]
     require(isinstance(name, str) and len(name) <= 64 and re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name))
-    require(kind == path.relative_to(root).parts[0])
+    expected_kind = "skill" if standalone else path.relative_to(root).parts[0]
+    require(kind == expected_kind)
+    if standalone:
+        behavior = meta["metadata"]["behavior"]
+        require(isinstance(behavior, str) and behavior.strip())
     require(name == (path.stem if kind == "agent" else path.parent.name))
     require(isinstance(meta["description"], str) and 0 < len(meta["description"]) <= 1024)
     interface = meta["metadata"]
@@ -78,6 +201,15 @@ if __name__ == "__main__":
     try:
         if sys.argv[1:] == ["yaml"]:
             json.dump(yaml_read(sys.stdin.read()), sys.stdout, allow_nan=False)
+        elif len(sys.argv) == 4 and sys.argv[1] == "skill-structure":
+            skill_structure(Path(sys.argv[2]), sys.argv[3])
+        elif len(sys.argv) == 5 and sys.argv[1] == "import-name":
+            import_name(Path(sys.argv[2]), sys.argv[3], sys.argv[4])
+        elif len(sys.argv) == 3 and sys.argv[1] == "runtime-display":
+            runtime_display(Path(sys.argv[2]))
+        elif len(sys.argv) == 3 and sys.argv[1] == "skill":
+            root = Path(sys.argv[2])
+            entry(root, root / "SKILL.md", standalone=True)
         elif len(sys.argv) == 3 and sys.argv[1] == "catalog":
             catalog_check(Path(sys.argv[2]))
         else:

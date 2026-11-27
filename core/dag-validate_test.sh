@@ -16,8 +16,16 @@ read_json() {
 
 reject() {
   local label=$1 filter=$2 expected=${3:-}
+  # GIVEN a copy of the review DAG with one altered contract condition.
   jq "$filter" "$fixture/base.json" > "$fixture/$label.yaml"
-  if bash "$validator" "$fixture/$label.yaml" "$schema" "$root/tests/fixtures/review" > "$fixture/$label.out" 2>&1; then
+
+  # WHEN the altered DAG is validated.
+  local status=0
+  bash "$validator" "$fixture/$label.yaml" "$schema" "$root/tests/fixtures/review" > "$fixture/$label.out" 2>&1 ||
+    status=$?
+
+  # THEN validation fails with the expected contract diagnostic.
+  if [[ "$status" == 0 ]]; then
     printf 'DAG_NEGATIVE_FAILED=%s\n' "$label" >&2
     exit 1
   fi
@@ -27,9 +35,14 @@ reject() {
   fi
 }
 
-bash "$validator" "$manifest" "$schema" "$root/tests/fixtures/review" > "$fixture/valid.out"
-grep -q '^DAG_CONTRACT=PASS (review)' "$fixture/valid.out"
+# GIVEN the unchanged review DAG and its schema.
 read_json
+
+# WHEN the review DAG is validated.
+bash "$validator" "$manifest" "$schema" "$root/tests/fixtures/review" > "$fixture/valid.out"
+
+# THEN the validator accepts the contract for the expected source.
+grep -q '^DAG_CONTRACT=PASS (review)' "$fixture/valid.out"
 jq -e '.source == "capability/dag/dag-review/SKILL.md"' "$fixture/base.json" >/dev/null
 
 # Production regression caught: a mutating remediation silently skips approval.
@@ -61,4 +74,12 @@ reject boolean_schema_version '.schema_version = true'
 reject wrong_id '.id = "fake"' SOURCE_MAPPING
 reject legacy_source '.source = "skills/candidates/dag-review/SKILL.md"' PATTERN_AT_dag_source
 
-printf '%s\n' 'DAG_FIXTURES=PASS (1 positive contract; 12 rejected unsafe or incomplete variants)'
+schema="$root/core/dag-contract.schema.json"
+reject dangling_skip '(.nodes[] | select(.id == "experiment")) |= (.on_skip = "ghost" | .skip_if = "missing")' \
+  INVALID_SKIP_experiment
+reject incomplete_skip '(.nodes[] | select(.id == "experiment") | .on_skip) = "conclusion"' \
+  INCOMPLETE_SKIP_experiment
+reject cyclic_skip '(.nodes[] | select(.id == "experiment")) |= (.on_skip = "intake" | .skip_if = "again")' \
+  INVALID_SKIP_experiment
+
+printf '%s\n' 'DAG_FIXTURES=PASS (1 positive contract; 15 rejected unsafe or incomplete variants)'

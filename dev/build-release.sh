@@ -27,4 +27,4 @@ for target in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
     cp README.md LICENSE "$stage/$name/"
     tar -czf "dist/$name.tar.gz" -C "$stage" "$name"
 done
-sha256sum dist/*.tar.gz >dist/checksums.txt
+(cd dist && sha256sum *.tar.gz >checksums.txt)

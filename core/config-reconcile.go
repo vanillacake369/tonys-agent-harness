@@ -23,7 +23,7 @@ func setup(c config, args []string) error {
 	}
 	var alreadyInitialized = exists(c.archive) || exists(c.workspace)
 	if alreadyInitialized {
-		return errors.New("already initialized; run harness config apply")
+		return errors.New("already initialized; run harness apply")
 	}
 	parent, err := filepath.EvalSymlinks(filepath.Dir(c.archive))
 	if err != nil || parent != filepath.Dir(c.archive) {
@@ -41,13 +41,13 @@ func setup(c config, args []string) error {
 	}
 	if isEmptySetup {
 		fmt.Println("EDIT:", c.workspace)
-		fmt.Println("PENDING: add a valid capability, then run harness config apply")
+		fmt.Println("PENDING: add a valid capability, then run harness apply")
 		return nil
 	}
 	if err = reconcile(c, "sync"); err != nil {
 		return err
 	}
-	fmt.Println("READY: harness config edit; harness config apply")
+	fmt.Println("READY: harness edit; harness apply")
 	return status(c)
 }
 
@@ -94,7 +94,10 @@ func initialize(c config, args []string) (resultErr error) {
 	} else if err = migrateTree(c, root, args); err != nil {
 		return err
 	}
-	return os.Rename(root, c.workspace)
+	if err = os.Rename(root, c.workspace); err != nil {
+		return err
+	}
+	return writeWorkspaceBase(c, "absent")
 }
 
 func emptyTree(root string) error {
@@ -191,6 +194,9 @@ func reconcileWithOptions(c config, cmd string, jsonOutput, quiet, verbose bool)
 		return err
 	}
 	if cmd == "unlock" && exists(c.workspace) {
+		if _, err := checkWorkspaceBase(c); err != nil {
+			return err
+		}
 		if !quiet {
 			fmt.Println("EDIT:", c.workspace)
 		}
@@ -202,11 +208,27 @@ func reconcileWithOptions(c config, cmd string, jsonOutput, quiet, verbose bool)
 		}
 		return nil
 	}
+	var editing = exists(c.workspace)
+	var archiveBase string
+	if editing {
+		if _, err := checkWorkspaceBase(c); err != nil {
+			return err
+		}
+	} else {
+		var err error
+		archiveBase, err = currentArchiveFingerprint(c)
+		if err != nil {
+			return err
+		}
+	}
 	stage, err := stageCreate(c)
 	if err != nil {
 		return err
 	}
 	defer cleanupPath(&resultErr, stage)
+	if err = prepareValidators(&c, stage); err != nil {
+		return err
+	}
 	root := filepath.Join(stage, "capability")
 	before, err := materialize(c, root)
 	if err != nil {
@@ -226,7 +248,13 @@ func reconcileWithOptions(c config, cmd string, jsonOutput, quiet, verbose bool)
 		}
 	}
 	if cmd == "unlock" {
+		if err = verifyArchiveFingerprint(c, archiveBase); err != nil {
+			return err
+		}
 		if err = os.Rename(root, c.workspace); err != nil {
+			return err
+		}
+		if err = writeWorkspaceBase(c, archiveBase); err != nil {
 			return err
 		}
 		if !quiet {
@@ -238,15 +266,15 @@ func reconcileWithOptions(c config, cmd string, jsonOutput, quiet, verbose bool)
 	if err != nil {
 		return err
 	}
+	if cmd == "lock" {
+		return lockCommit(c, stage, before, after)
+	}
 	changed := !bytes.Equal(before, after)
-	if exists(c.workspace) {
-		changed, err = archiveChanged(c, stage, after)
+	if editing {
+		changed, err = archiveChanged(c, filepath.Join(stage, "compare"), after)
 		if err != nil {
 			return err
 		}
-	}
-	if cmd == "lock" {
-		return lockCommit(c, stage, before, after)
 	}
 	nodes, err := deploymentNodes(c, root)
 	if err != nil {
@@ -254,12 +282,14 @@ func reconcileWithOptions(c config, cmd string, jsonOutput, quiet, verbose bool)
 	}
 	return deploy(c, deployment{
 		stage: stage, root: root, nodes: nodes, plain: after, before: before,
-		changed: changed, plan: cmd == "plan", editing: exists(c.workspace), jsonOutput: jsonOutput, verbose: verbose,
+		changed: changed, plan: cmd == "plan", editing: editing, jsonOutput: jsonOutput, verbose: verbose,
+		archiveBase: archiveBase,
 	})
 }
 
 // Source를 임시 후보에 투영한 뒤 최종 그래프와 모든 계약을 한 번 검증한다.
 func deploymentNodes(c config, root string) (map[string]node, error) {
+	c.imports = make(map[string]provenance)
 	if err := sourcesProject(c, root); err != nil {
 		return nil, err
 	}
@@ -270,7 +300,16 @@ func deploymentNodes(c config, root string) (map[string]node, error) {
 편집본의 변경 여부를 확인하고 왕복 검증된 암호문을 먼저 저장한다.
 저장 전후 편집본이 달라졌다면 원본을 삭제하지 않는다.
 */
-func lockCommit(c config, stage string, before, after []byte) error {
+func lockCommit(c config, stage string, before, after []byte) (resultErr error) {
+	lock, err := vaultOperationLock(c)
+	if err != nil {
+		return err
+	}
+	defer func() { resultErr = errors.Join(resultErr, lock.Close()) }()
+	baseline, err := checkWorkspaceBase(c)
+	if err != nil {
+		return err
+	}
 	current, err := pack(c.workspace)
 	if err != nil {
 		return err
@@ -278,25 +317,17 @@ func lockCommit(c config, stage string, before, after []byte) error {
 	if !bytes.Equal(before, current) {
 		return errors.New("workspace changed; retry after closing editor")
 	}
-	same := false
-	if exists(c.archive) {
-		previous := filepath.Join(stage, "previous")
-		if err = os.Mkdir(previous, 0700); err != nil {
-			return err
-		}
-		if err = decrypt(c, previous); err != nil {
-			return err
-		}
-		data, err := pack(previous)
-		if err != nil {
-			return err
-		}
-		same = bytes.Equal(data, after)
+	changed, err := archiveChanged(c, filepath.Join(stage, "previous"), after)
+	if err != nil {
+		return err
 	}
-	if !same {
-		if err = seal(c, after); err != nil {
-			return err
-		}
+	if changed {
+		err = seal(c, after, baseline)
+	} else {
+		err = verifyArchiveFingerprint(c, baseline)
+	}
+	if err != nil {
+		return err
 	}
 	current, err = pack(c.workspace)
 	if err != nil {
@@ -305,22 +336,24 @@ func lockCommit(c config, stage string, before, after []byte) error {
 	if !bytes.Equal(before, current) {
 		return errors.New("workspace changed during commit; original retained")
 	}
-	return os.RemoveAll(c.workspace)
+	if err = os.RemoveAll(c.workspace); err != nil {
+		return err
+	}
+	return os.Remove(workspaceBasePath(c))
 }
 
 type deployment struct {
-	stage, root                                 string
+	stage, root, archiveBase                    string
 	nodes                                       map[string]node
 	plain, before                               []byte
 	changed, plan, editing, jsonOutput, verbose bool
 	providersChanged                            bool
 }
 
-func archiveChanged(c config, stage string, after []byte) (bool, error) {
+func archiveChanged(c config, path string, after []byte) (bool, error) {
 	if !exists(c.archive) {
 		return true, nil
 	}
-	path := filepath.Join(stage, "compare")
 	if err := os.Mkdir(path, 0700); err != nil {
 		return false, err
 	}
@@ -392,21 +425,26 @@ func deploy(c config, d deployment) error {
 
 // apply는 열린 편집본도 명시적으로 저장하고 배포한다.
 // Runtime 후보 검증 후에만 암호문을 교체한다.
-func commitDeployment(c config, d deployment) error {
+func commitDeployment(c config, d deployment) (resultErr error) {
 	if d.editing {
 		return lockCommit(c, d.stage, d.before, d.plain)
 	}
-	if d.changed {
-		return seal(c, d.plain)
+	if !d.changed {
+		return nil
 	}
-	return nil
+	lock, err := vaultOperationLock(c)
+	if err != nil {
+		return err
+	}
+	defer func() { resultErr = errors.Join(resultErr, lock.Close()) }()
+	return seal(c, d.plain, d.archiveBase)
 }
 
 // 편집기를 정상 종료한 경우에만 저장과 배포를 진행한다.
 // 편집기가 실패하면 복호화된 원본을 유지하여 사용자의 변경을 보호한다.
-func edit(c config) error { return editTarget(c, "") }
+func edit(c config) error { return editTarget(c, "", true) }
 
-func editTarget(c config, target string) error {
+func editTarget(c config, target string, apply bool) error {
 	path, err := editorExecutable()
 	if err != nil {
 		return err
@@ -424,7 +462,10 @@ func editTarget(c config, target string) error {
 	cmd := exec.Command(path, selected)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err = cmd.Run(); err != nil {
-		return errors.New("editor failed; workspace retained; run harness config edit or harness config apply")
+		return errors.New("editor failed; workspace retained; run harness edit or harness apply")
+	}
+	if !apply {
+		return nil
 	}
 	return reconcile(c, "sync")
 }
@@ -481,14 +522,16 @@ func Init(source string) error {
 	return withState(true, func(c config) error { return setup(c, args) })
 }
 
-func Edit(target string) error {
+func Edit(target string) error { return EditWorkspace(target, true) }
+
+func EditWorkspace(target string, apply bool) error {
 	if target != "" && !targetValid(target) {
 		return errors.New("invalid capability target")
 	}
 	if target == "" && !terminalInput() {
 		return errors.New("non-interactive edit requires kind/id")
 	}
-	return withInitializedState(func(c config) error { return editTarget(c, target) })
+	return withInitializedState(func(c config) error { return editTarget(c, target, apply) })
 }
 
 type ReconcileRequest struct{ Plan, JSON, Verbose bool }

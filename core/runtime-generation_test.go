@@ -3,6 +3,7 @@ package core
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -58,6 +59,57 @@ func TestRuntimeBuildUsesCapabilityKind(t *testing.T) {
 	}
 	if exists(filepath.Join(target, "reviewer.md")) {
 		t.Fatal("agent document was projected into runtime")
+	}
+}
+
+func TestRuntimeSkillInterfaceUsesCapabilityID(t *testing.T) {
+	c := fixtureConfig(t)
+	root := c.workspace
+	const ui = "interface:\n  display_name: 'Skill / Meeting'\n  short_description: 'Recap weekly meetings'\n" +
+		"  default_prompt: 'Use $meeting to recap the meeting.'\n" +
+		"policy:\n  allow_implicit_invocation: false\n"
+	const policyOnly = "policy:\n  allow_implicit_invocation: false\n"
+	const description = "---\nname: meeting\ndescription: Recap the weekly engineering meeting.\n---\n\nBody\n"
+	put(t, filepath.Join(root, "skill/meeting/SKILL.md"), description)
+	put(t, filepath.Join(root, "skill/meeting/agents/openai.yaml"), ui)
+	put(t, filepath.Join(root, "skill/imported/SKILL.md"), description)
+	put(t, filepath.Join(root, "skill/imported/agents/openai.yaml"), policyOnly)
+	put(t, filepath.Join(root, "skill/no-interface/SKILL.md"), description)
+	target := filepath.Join(c.state, "bundle")
+	must(t, runtimeBuild(c, root, target, map[string]node{
+		"meeting":      {Kind: "skill"},
+		"imported":     {Kind: "skill", Origin: "external"},
+		"no-interface": {Kind: "skill", Origin: "external"},
+	}))
+	for path, want := range map[string]string{
+		"meeting/agents/openai.yaml":                    strings.Replace(ui, "'Skill / Meeting'", `"meeting"`, 1),
+		"meeting/SKILL.md":                              description,
+		".capability/skill/meeting/agents/openai.yaml":  ui,
+		".capability/skill/imported/agents/openai.yaml": policyOnly,
+	} {
+		data, err := os.ReadFile(filepath.Join(target, path))
+		must(t, err)
+		if string(data) != want {
+			t.Errorf("%s: got %q, want %q", path, data, want)
+		}
+	}
+	for _, id := range []string{"imported", "no-interface"} {
+		data, err := os.ReadFile(filepath.Join(target, id, "agents/openai.yaml"))
+		must(t, err)
+		for _, want := range []string{
+			"display_name: " + id, "short_description: Recap the weekly engineering meeting.",
+			"default_prompt: Use $" + id,
+		} {
+			if !strings.Contains(string(data), want) {
+				t.Errorf("%s interface missing %q: %s", id, want, data)
+			}
+		}
+		if id == "imported" && !strings.Contains(string(data), "allow_implicit_invocation: false") {
+			t.Fatal("projected interface lost the explicit invocation policy")
+		}
+	}
+	if exists(filepath.Join(target, ".capability/skill/no-interface/agents/openai.yaml")) {
+		t.Fatal("generated interface leaked into the source snapshot")
 	}
 }
 
