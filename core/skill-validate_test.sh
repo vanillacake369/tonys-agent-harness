@@ -61,3 +61,11 @@ printf '%s\n' \
   '---' 'name: harness-smoke' 'description: test' 'allowed-tools: 42' \
   '---' '# Fixture' > "$fixture/harness-smoke/SKILL.md"
 expect_failure INVALID_SKILL
+
+cp "$sample/SKILL.md" "$fixture/harness-smoke/SKILL.md"
+printf '\n[crosses the root](../other.md)\n' >> "$fixture/harness-smoke/SKILL.md"
+touch "$fixture/other.md"
+expect_failure INVALID_RESOURCE
+printf '%s\n' '---' 'name: harness-smoke' 'description: test' 'description: duplicate' '---' '# Fixture' \
+  > "$fixture/harness-smoke/SKILL.md"
+expect_failure INVALID_SKILL

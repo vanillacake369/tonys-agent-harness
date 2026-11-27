@@ -35,6 +35,56 @@ def require(condition):
         raise ValueError("invalid catalog metadata")
 
 
+def skill_structure(root, bundle):
+    try:
+        doc = (root / "SKILL.md").read_bytes().decode("utf-8")
+        first, _, rest = doc.partition("\n")
+        header, fence, body = rest.partition("\n---\n")
+        require(first == "---" and fence)
+        require(any(line != "---" and line.strip() for line in body.split("\n")))
+        data = yaml_read(header)
+        json.dumps(data, allow_nan=False)
+        require(isinstance(data, dict) and data.get("name") == root.name)
+        require(len(root.name) <= 64 and re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", root.name))
+        require(nonblank_text(data.get("description"), limit=1024))
+        for key, limit in (("compatibility", 500), ("license", None), ("allowed-tools", None)):
+            require(key not in data or nonblank_text(data[key], limit))
+        if "metadata" in data:
+            meta = data["metadata"]
+            require(isinstance(meta, dict) and all(isinstance(value, str) for value in meta.values()))
+    except (OSError, ValueError, TypeError, yaml.YAMLError):
+        sys.exit("INVALID_SKILL")
+    try:
+        skill_links(root, bundle)
+    except (OSError, ValueError, RuntimeError):
+        sys.exit("INVALID_RESOURCE")
+
+
+def nonblank_text(value, limit):
+    return isinstance(value, str) and bool(value.strip()) and (limit is None or len(value) <= limit)
+
+
+def skill_links(root, bundle):
+    root = root.resolve(strict=True)
+    policy = None
+    if bundle:
+        bundle = Path(bundle).resolve(strict=True)
+        require(len(root.relative_to(bundle).parts) >= 2)
+        policy_file = bundle / "POLICY.md"
+        if policy_file.is_file() and not policy_file.is_symlink():
+            policy = policy_file
+    pattern = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
+    for markdown in root.rglob("*.md"):
+        if not markdown.is_file():
+            continue
+        for target in pattern.findall(markdown.read_text(encoding="utf-8", errors="replace")):
+            if target.startswith(("https://", "http://", "mailto:", "#")):
+                continue
+            require(not target.startswith("/") and not any(c in target for c in ": %\\\n\r"))
+            link = (markdown.parent / target.split("#", 1)[0]).resolve(strict=True)
+            require(link == root or root in link.parents or link == policy)
+
+
 def import_name(path, original, imported):
     doc = path.read_bytes().decode("utf-8")
     require(doc.startswith("---\n"))
@@ -98,6 +148,8 @@ if __name__ == "__main__":
     try:
         if sys.argv[1:] == ["yaml"]:
             json.dump(yaml_read(sys.stdin.read()), sys.stdout, allow_nan=False)
+        elif len(sys.argv) == 4 and sys.argv[1] == "skill-structure":
+            skill_structure(Path(sys.argv[2]), sys.argv[3])
         elif len(sys.argv) == 5 and sys.argv[1] == "import-name":
             import_name(Path(sys.argv[2]), sys.argv[3], sys.argv[4])
         elif len(sys.argv) == 3 and sys.argv[1] == "skill":

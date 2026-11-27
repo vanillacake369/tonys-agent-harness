@@ -78,7 +78,7 @@ func (Application) ValidateSkill(path string) (resultErr error) {
 	if err != nil {
 		return err
 	}
-	for _, tool := range []string{"bash", "jq", "python3", "realpath"} {
+	for _, tool := range []string{"bash", "python3", "find", "grep"} {
 		if _, err = exec.LookPath(tool); err != nil {
 			return fmt.Errorf("skill validation requires %s on PATH", tool)
 		}
