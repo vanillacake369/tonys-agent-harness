@@ -16,11 +16,11 @@
 | 항목 | AS-IS | TO-BE | 완료 기준 |
 |---|---|---|---|
 | Worktree | 형제 디렉터리 배치를 수동으로 적용 | `just worktree NAME`으로 기본 체크아웃과 같은 부모 아래 `NAME` 생성 | 로컬 `main`의 기준 커밋을 사용. 이미 있는 디렉터리·링크·브랜치 거부. 원본 편집본 보존 |
-| 그래프 | 기본 `config graph`는 원본을 후보로 복사하거나 복호화해 검증. Source 투영은 배포 시 수행 | `config graph --scope runtime`으로 활성 세대에 저장된 그래프 읽기 | 기존 기본 출력 호환. Runtime의 외부 노드·관계 확인. 잠금·키·Vault 없이 조회. 활성 세대 없음과 손상된 그래프는 오류 |
+| 그래프 | 기본 `config graph`는 원본을 후보로 복사하거나 복호화해 검증. Source 투영은 배포 시 수행 | `harness graph`로 활성 세대에 저장된 그래프 읽기 | 기존 기본 출력 호환. Runtime의 외부 노드·관계 확인. 잠금·키·Vault 없이 조회. 활성 세대 없음과 손상된 그래프는 오류 |
 | 성능 | 이전 점검에서 합성 86개 기본 그래프 중앙값 1.56초 | 같은 fixture에서 기존 기본 그래프와 새 Runtime 그래프 비교 | 단일 호스트에서 중앙값 90% 이상 단축. 노드·관계 일치 및 기본 조회 성능 함께 기록 |
 
 - Worktree 실행 파일은 `dev/worktree-create.sh`, 진입점은 `justfile`, 배치 규칙은 `AGENTS.md`에 둔다. `TestWorktreeCreate`는 합성 Git 저장소에서 실제 도구를 실행한다.
-- CLI는 `GraphRequest.Scope`를 전달한다. `core`는 활성 세대의 스키마 v3 그래프를 파싱하고 기존 필터·렌더러를 사용한다. `TestRuntimeGraphCLI`는 활성 그래프, 조회 오류, 상태 보존을 CLI에서 확인한다.
+- CLI는 명령에 따라 로컬 선언 또는 활성 Runtime을 선택한다. `core`는 활성 세대의 스키마 v3 그래프를 파싱하고 기존 필터·렌더러를 사용한다. `TestRuntimeGraphCLI`는 활성 그래프, 조회 오류, 상태 보존을 CLI에서 확인한다.
 - 배포 포맷과 Capability ID를 보존한다. 이 변경을 되돌릴 경우 기존 `config graph`로 조회한다.
 
 ### M1 검증 결과

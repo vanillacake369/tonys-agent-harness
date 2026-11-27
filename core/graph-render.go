@@ -11,9 +11,9 @@ import (
 )
 
 type graphOptions struct {
-	target, format, relation, scope string
-	reverse                         bool
-	depth                           int
+	target, format, relation string
+	reverse, runtime         bool
+	depth                    int
 }
 type graphNode struct {
 	ID        string      `json:"id"`
@@ -34,30 +34,24 @@ type graphView struct {
 }
 
 type GraphRequest struct {
-	Target, Format, Relation, Scope string
-	Reverse                         bool
-	Depth                           int // -1 means unlimited
+	Target, Format, Relation string
+	Reverse, Runtime         bool
+	Depth                    int // -1 means unlimited
 }
 
 func graphRequest(req GraphRequest) (graphOptions, error) {
 	if req.Format == "" {
 		req.Format = "tree"
 	}
-	if req.Scope == "" {
-		req.Scope = "local"
-	}
 	o := graphOptions{
-		target: req.Target, format: req.Format, relation: req.Relation, scope: req.Scope,
-		reverse: req.Reverse, depth: req.Depth,
+		target: req.Target, format: req.Format, relation: req.Relation,
+		reverse: req.Reverse, runtime: req.Runtime, depth: req.Depth,
 	}
 	if req.Format != "tree" && req.Format != "json" && req.Format != "dot" {
 		return o, errors.New("unknown graph format")
 	}
 	if req.Relation != "" && req.Relation != "requires" && req.Relation != "hints" {
 		return o, errors.New("unknown graph relation")
-	}
-	if req.Scope != "local" && req.Scope != "runtime" {
-		return o, errors.New("unknown graph scope")
 	}
 	if req.Target != "" && !targetValid(req.Target) {
 		return o, errors.New("invalid graph target")
@@ -73,7 +67,7 @@ func Graph(req GraphRequest, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if opts.scope == "runtime" {
+	if opts.runtime {
 		return graphReadRuntime(opts, w)
 	}
 	return withInitializedState(func(c config) error { return graphRead(c, opts, w) })
@@ -183,8 +177,7 @@ requires와 hints를 구분하고 원래 edge 방향을 보존한다.
 */
 func graphBuild(nodes map[string]node, o graphOptions) (graphView, error) {
 	v := graphView{Version: 1, Scope: "local_desired", Nodes: []graphNode{}, Edges: []graphEdge{}}
-	var runtime = o.scope == "runtime"
-	if runtime {
+	if o.runtime {
 		v.Scope = "active_runtime"
 	}
 	ids := make([]string, 0, len(nodes))
@@ -196,7 +189,7 @@ func graphBuild(nodes map[string]node, o graphOptions) (graphView, error) {
 		n := nodes[id]
 		from := n.Kind + "/" + id
 		entry := graphNode{ID: from, Kind: n.Kind}
-		if runtime {
+		if o.runtime {
 			entry.Origin = n.Origin
 			entry.Execution = n.Execution
 		}

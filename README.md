@@ -199,6 +199,7 @@ _(참고: 전역 Nix store는 건드리지 않으므로 시스템의 Nix 도구�
 | `harness edit [kind/id]` / `harness edit --path` | 편집기 실행 또는 Workspace 경로 출력 |
 | `harness edit --apply [kind/id]` | 편집기 정상 종료 후 적용 |
 | `harness apply [--dry-run]` | 검증, 저장 및 배포 |
+| `harness graph [kind/id]` | 외부 Source를 포함한 활성 Runtime의 구성 관계 조회 |
 | `harness source status\|check\|pin` | 현재 핀 확인, 후보 조회, 검토한 SHA 저장 |
 | `harness provider status\|connect\|disconnect` | 접근 상태 확인, 승인 및 해제 |
 | `harness skill new ID --output DIR` / `harness skill validate DIR` | 스킬 초안 작성 및 단독 검증 |
@@ -206,9 +207,9 @@ _(참고: 전역 Nix store는 건드리지 않으므로 시스템의 Nix 도구�
 
 ### 고급 운영과 복구
 
-- `config graph [kind/id]`로 로컬 선언의 구성 관계를 확인합니다.
-- `config graph --scope runtime [kind/id]`로 외부 Source가 포함된 활성 세대의 그래프를 조회합니다.
-  이 조회는 Vault 키와 작업 잠금 없이 동작합니다. `--format json`은 노드의 출처와 선언된 Tool 실행 조건을 표시합니다.
+- `harness config graph [kind/id]`로 배포 전 로컬 선언의 구성 관계를 확인합니다.
+- `harness graph`는 Vault 키와 작업 잠금 없이 활성 Runtime을 읽습니다.
+  `harness graph --format json`은 노드의 출처와 선언된 Tool 실행 조건을 표시합니다.
 - DAG의 `DAG.yaml` 단계별 `capabilities`는 그래프의 `hints`에 반영합니다. 같은 참조가 `requires`에 있으면
   해당 선언을 사용합니다. 공통 DAG 스키마는 빌드와 함께 제공되며 기존 DAG별 제약이 있으면 함께 검사합니다.
 - `config runtime reset`은 복구 전용입니다. Runtime 손상 시 사용 중인 Agent를 중지한 다음 실행하고 `harness apply`로 재구성합니다.

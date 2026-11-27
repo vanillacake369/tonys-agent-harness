@@ -14,7 +14,7 @@ Config 명령은 Capability와 Vault의 수명주기를 관리한다.
 */
 func Command(application core.Application) *cobra.Command {
 	var cmd = &cobra.Command{Use: "config", Short: "Manage capabilities and runtime", Args: cobra.NoArgs}
-	cmd.AddCommand(commandInit(application), commandGraph(application), commandRuntime(application))
+	cmd.AddCommand(commandInit(application), commandGraph(application, false), commandRuntime(application))
 	return cmd
 }
 
@@ -44,7 +44,7 @@ func LifecycleCommands(application core.Application) []*cobra.Command {
 	edit.Flags().BoolVar(&path, "path", false, "Print the workspace path for external editing")
 	edit.Flags().BoolVar(&apply, "apply", false, "Save and deploy when the editor exits successfully")
 	edit.MarkFlagsMutuallyExclusive("path", "apply")
-	return []*cobra.Command{setup, edit, commandApply(application)}
+	return []*cobra.Command{setup, edit, commandApply(application), commandGraph(application, true)}
 }
 
 func formatValidate(value string, allowed ...string) error {
@@ -92,9 +92,13 @@ func commandReset(application core.Application) *cobra.Command {
 		RunE: func(_ *cobra.Command, _ []string) error { return application.Purge() }}
 }
 
-func commandGraph(application core.Application) *cobra.Command {
-	var req core.GraphRequest
-	var cmd = &cobra.Command{Use: "graph [kind/id]", Short: "Explore composition", Args: cobra.MaximumNArgs(1)}
+func commandGraph(application core.Application, runtime bool) *cobra.Command {
+	var req = core.GraphRequest{Runtime: runtime}
+	short := "Inspect local capability declarations"
+	if runtime {
+		short = "Inspect the active runtime graph"
+	}
+	var cmd = &cobra.Command{Use: "graph [kind/id]", Short: short, Args: cobra.MaximumNArgs(1)}
 	cmd.PreRunE = func(_ *cobra.Command, _ []string) error {
 		if err := formatValidate(req.Format, "tree", "dot", "json"); err != nil {
 			return err
@@ -109,7 +113,6 @@ func commandGraph(application core.Application) *cobra.Command {
 		return application.Graph(req, c.OutOrStdout())
 	}
 	cmd.Flags().StringVar(&req.Format, "format", "tree", "Output: tree, dot or json")
-	cmd.Flags().StringVar(&req.Scope, "scope", "local", "Graph source: local or runtime")
 	cmd.Flags().StringVar(&req.Relation, "relation", "", "Filter: requires or hints")
 	cmd.Flags().BoolVar(&req.Reverse, "reverse", false, "Explore consumers")
 	cmd.Flags().IntVar(&req.Depth, "depth", -1, "Traversal depth; -1 means unlimited")
