@@ -1,0 +1,4 @@
+interface:
+  display_name: "Skill / System Performance"
+  short_description: "Diagnose bottlenecks and verify performance changes"
+  default_prompt: "Use $skl-mid-system-performance-ljh to investigate or verify this performance workload with reproducible evidence."
