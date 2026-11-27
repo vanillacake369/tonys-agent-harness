@@ -4,6 +4,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from textwrap import shorten
 
 import yaml
 
@@ -102,16 +103,23 @@ def import_name(path, original, imported):
 
 
 def runtime_display(root):
-    for path in sorted(root.glob("*/agents/openai.yaml")):
+    skills = {doc.parent.name for doc in (root / ".capability/skill").glob("*/SKILL.md")}
+    files = set(root.glob("*/agents/openai.yaml"))
+    files.update(root / skill_id / "agents/openai.yaml" for skill_id in skills)
+    for path in sorted(files):
         try:
-            text = path.read_bytes().decode("utf-8")
-            data = yaml_read(text)
+            text = path.read_bytes().decode("utf-8") if path.exists() else ""
+            data = yaml_read(text) if text.strip() else {}
         except (ValueError, yaml.YAMLError):
-            # Imported skills can omit usable Codex UI metadata and fall back to their skill ID.
+            # Leave unsupported vendor YAML intact.
             continue
-        interface = data.get("interface") if isinstance(data, dict) else None
+        interface = data.get("interface", {}) if isinstance(data, dict) else None
+        if not isinstance(interface, dict):
+            continue
         skill_id = path.parent.parent.name
-        if not isinstance(interface, dict) or interface.get("display_name") in (None, "", skill_id):
+        if skill_id in skills and fill_runtime_skill_interface(path, data, interface):
+            continue
+        if interface.get("display_name") in (None, "", skill_id):
             continue
         doc = yaml.compose(text, Loader=UniqueLoader)
         fields = next(value for key, value in doc.value if key.value == "interface")
@@ -123,6 +131,27 @@ def runtime_display(root):
         data["interface"] = dict(interface, display_name=skill_id)
         require(yaml_read(candidate) == data)
         path.write_bytes(candidate.encode("utf-8"))
+
+
+def fill_runtime_skill_interface(path, data, interface):
+    fields = ("display_name", "short_description", "default_prompt")
+    if all(nonblank_text(interface.get(field), None) for field in fields):
+        return False
+    skill = path.parent.parent
+    result = dict(interface, display_name=skill.name)
+    if not nonblank_text(result.get("short_description"), None):
+        _, _, rest = (skill / "SKILL.md").read_text(encoding="utf-8").partition("\n")
+        header, fence, _ = rest.partition("\n---\n")
+        description = yaml_read(header).get("description", "") if fence else ""
+        short = shorten(description, width=64, placeholder="…")
+        result["short_description"] = short if len(short) >= 25 else "Use this skill for the matching task"
+    if not nonblank_text(result.get("default_prompt"), None):
+        result["default_prompt"] = f"Use ${skill.name} for this request."
+    data["interface"] = result
+    path.parent.mkdir(mode=0o700, exist_ok=True)
+    path.touch(mode=0o600, exist_ok=True)
+    path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    return True
 
 
 def entry(root, path, standalone=False):
