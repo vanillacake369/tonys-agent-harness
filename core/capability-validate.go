@@ -1,12 +1,14 @@
 package core
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -19,6 +21,7 @@ type node struct {
 	Requires   []string    `json:"requires"`
 	Hints      []string    `json:"hints"`
 	Content    string      `json:"content_sha256"`
+	Execution  *toolAccess `json:"execution,omitempty"`
 }
 
 type nodeJob struct {
@@ -112,13 +115,11 @@ func nodeRead(c config, root, kind, name, path string) (node, error) {
 	}
 	var hasDAG = kind == "dag" && exists(filepath.Join(filepath.Dir(path), "DAG.yaml"))
 	if hasDAG {
-		dir := filepath.Dir(path)
-		if err = contractCheck(
-			c, "dag-validate.sh", filepath.Join(dir, "DAG.yaml"),
-			filepath.Join(dir, "dag-contract.schema.json"), filepath.Dir(root),
-		); err != nil {
+		refs, err := dagStageReferences(c, root, filepath.Dir(path))
+		if err != nil {
 			return n, err
 		}
+		n.Hints = mergeDAGReferences(n, refs)
 	}
 	if kind == "tool" && name == "tool-git-evidence" {
 		if err = contractCheck(
@@ -155,7 +156,77 @@ func nodesRead(c config, root string) (map[string]node, error) {
 	if len(nodes) == 0 {
 		return nil, errors.New("empty capability tree")
 	}
-	return nodes, relationsValidate(nodes)
+	if err := relationsValidate(nodes); err != nil {
+		return nil, err
+	}
+	return nodes, toolAccessRead(c, nodes)
+}
+
+func dagStageReferences(c config, root, dir string) (_ []string, resultErr error) {
+	if c.validatorDir == "" {
+		stage, err := os.MkdirTemp(c.state, "stage-dag-")
+		if err != nil {
+			return nil, err
+		}
+		defer cleanupPath(&resultErr, stage)
+		if err = prepareValidators(&c, stage); err != nil {
+			return nil, err
+		}
+	}
+	legacy := filepath.Join(dir, "dag-contract.schema.json")
+	if !exists(legacy) {
+		legacy = ""
+	}
+	var output bytes.Buffer
+	manifest := filepath.Join(dir, "DAG.yaml")
+	schema := filepath.Join(c.validatorDir, "dag-contract.schema.json")
+	err := validatorStart(c, "bash", "dag-validate.sh", &output,
+		manifest, schema, filepath.Dir(root), "references", legacy)
+	if err != nil {
+		return nil, errors.New("DAG contract invalid (private details suppressed)")
+	}
+	var refs []string
+	err = json.Unmarshal(output.Bytes(), &refs)
+	return refs, err
+}
+
+func mergeDAGReferences(n node, refs []string) []string {
+	for _, ref := range refs {
+		if !slices.Contains(n.Requires, ref) && !slices.Contains(n.Hints, ref) {
+			n.Hints = append(n.Hints, ref)
+		}
+	}
+	return n.Hints
+}
+
+type toolAccess struct {
+	Method       string `json:"method"`
+	Availability string `json:"availability"`
+}
+
+func toolAccessRead(c config, nodes map[string]node) error {
+	data, err := readRegular(filepath.Join(c.repo, "contract/local-access.json"))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var catalog struct {
+		Version int                   `json:"schema_version"`
+		Tools   map[string]toolAccess `json:"tools"`
+	}
+	if err = json.Unmarshal(data, &catalog); err != nil || catalog.Version != 1 {
+		return errors.New("invalid local tool access catalog")
+	}
+	for id, access := range catalog.Tools {
+		n, ok := nodes[id]
+		if ok && n.Kind == "tool" {
+			n.Execution = &access
+			nodes[id] = n
+		}
+	}
+	return nil
 }
 
 func nodeJobs(root string) ([]nodeJob, error) {
@@ -283,7 +354,7 @@ func relationAllowed(from, to string) bool {
 	case "skill":
 		return to == "tool"
 	case "dag":
-		return to == "skill"
+		return to == "skill" || to == "tool"
 	case "agent":
 		return to == "tool" || to == "skill" || to == "dag" || to == "agent"
 	default:

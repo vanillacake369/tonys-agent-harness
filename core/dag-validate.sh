@@ -5,6 +5,8 @@ set -euo pipefail
 manifest=${1:?usage: validate-dag-contract.sh DAG_YAML SCHEMA_JSON}
 schema=${2:?usage: validate-dag-contract.sh DAG_YAML SCHEMA_JSON REPO_ROOT}
 root=${3:?usage: validate-dag-contract.sh DAG_YAML SCHEMA_JSON REPO_ROOT}
+output=${4:-status}
+legacy=${5:-}
 fail() {
     printf 'INVALID_DAG:%s\n' "$1" >&2
     exit 2
@@ -16,7 +18,7 @@ json=$(mktemp)
 trap 'rm -f "$json"' EXIT
 python3 "$(dirname "$0")/metadata-validate.py" yaml < "$manifest" > "$json" || fail YAML_PARSE
 
-python3 - "$json" "$schema" "$root" <<'PY'
+python3 - "$json" "$schema" "$root" "$output" "$legacy" "$manifest" <<'PY'
 import json
 import re
 import sys
@@ -86,6 +88,12 @@ def validate(dag, schema, repository_root):
     source = root / dag["source"]
     if not source.is_file() or source.is_symlink():
         fail("SOURCE_UNAVAILABLE")
+    common_handoff = {
+        "authorized_scope", "current_node", "evidence_refs", "forbidden_actions",
+        "next_action", "observed_at", "owner", "target_revision", "time_budget",
+    }
+    if not common_handoff.issubset(dag["handoff"]):
+        fail("INCOMPLETE_HANDOFF")
     statuses = set(schema["properties"]["terminals"]["items"]["enum"])
     if set(dag["terminals"]) != statuses:
         fail("TERMINAL_SET")
@@ -140,15 +148,22 @@ def validate(dag, schema, repository_root):
 
     for node_id in nodes:
         visit(node_id)
-    reached = set()
+    reached = {}
     current = dag["entry"]
     while current in nodes and current not in reached:
-        reached.add(current)
+        reached[current] = len(reached)
         current = nodes[current]["on_success"]
-    if reached != set(nodes):
+    if reached.keys() != nodes.keys():
         fail("UNREACHABLE_NODE")
     if current != "VERIFIED":
         fail("UNVERIFIED_SUCCESS_PATH")
+    for node_id, node in nodes.items():
+        skip, predicate = node.get("on_skip"), node.get("skip_if")
+        if bool(skip) != bool(predicate and predicate.strip()):
+            fail(f"INCOMPLETE_SKIP_{node_id}")
+        if skip and skip not in {"BLOCKED", "FAILED", "UNRESOLVED"}:
+            if reached.get(skip, -1) <= reached[node_id]:
+                fail(f"INVALID_SKIP_{node_id}")
 
 
 try:
@@ -159,8 +174,17 @@ try:
     with schema_file.open(encoding="utf-8") as handle:
         schema = json.load(handle)
     validate(dag, schema, Path(sys.argv[3]))
+    output, legacy, manifest = sys.argv[4:]
+    if legacy:
+        with Path(legacy).open(encoding="utf-8") as handle:
+            check(dag, json.load(handle))
+    if output == "references" and Path(manifest).parent.name != "dag-" + dag["id"]:
+        fail("SOURCE_MAPPING")
 except (OSError, ValueError, KeyError, TypeError, re.error) as error:
     print(f"INVALID_DAG:{error}", file=sys.stderr)
     sys.exit(2)
-print(f"DAG_CONTRACT=PASS ({dag['id']})")
+if output == "references":
+    print(json.dumps(sorted({ref for node in dag["nodes"] for ref in node.get("capabilities", [])})))
+else:
+    print(f"DAG_CONTRACT=PASS ({dag['id']})")
 PY

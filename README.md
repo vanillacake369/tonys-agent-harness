@@ -208,7 +208,9 @@ _(참고: 전역 Nix store는 건드리지 않으므로 시스템의 Nix 도구�
 
 - `config graph [kind/id]`로 로컬 선언의 구성 관계를 확인합니다.
 - `config graph --scope runtime [kind/id]`로 외부 Source가 포함된 활성 세대의 그래프를 조회합니다.
-  이 조회는 Vault 키와 작업 잠금 없이 동작합니다. `--format json`은 활성 노드의 출처를 표시합니다.
+  이 조회는 Vault 키와 작업 잠금 없이 동작합니다. `--format json`은 노드의 출처와 선언된 Tool 실행 조건을 표시합니다.
+- DAG의 `DAG.yaml` 단계별 `capabilities`는 그래프의 `hints`에 반영합니다. 같은 참조가 `requires`에 있으면
+  해당 선언을 사용합니다. 공통 DAG 스키마는 빌드와 함께 제공되며 기존 DAG별 제약이 있으면 함께 검사합니다.
 - `config runtime reset`은 복구 전용입니다. Runtime 손상 시 사용 중인 Agent를 중지한 다음 실행하고 `harness apply`로 재구성합니다.
 - `source cache prune --dry-run`으로 정리 대상을 보고, `source cache prune`으로 참조하지 않는 캐시를 삭제합니다.
 

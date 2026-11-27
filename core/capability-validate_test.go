@@ -82,3 +82,42 @@ func TestSkillValidatorIntegration(t *testing.T) {
 		t.Fatal("invalid skill accepted")
 	}
 }
+
+func TestDAGProjectsStageCapabilitiesIntegration(t *testing.T) {
+	integrationOnly(t)
+	c := fixtureConfig(t)
+	root := c.workspace
+	must(t, emptyTree(root))
+	fixture := "../tests/fixtures/review/capability"
+	dir := filepath.Join(root, "dag/dag-review")
+	must(t, copyTree(filepath.Join(fixture, "dag/dag-review"), dir))
+	must(t, copyTree(filepath.Join(fixture, "skill/skill-review-evidence"),
+		filepath.Join(root, "skill/skill-review-evidence")))
+	skill := filepath.Join(root, "skill/skill-review-evidence/SKILL.md")
+	skillDoc, err := os.ReadFile(skill)
+	must(t, err)
+	put(t, skill, strings.ReplaceAll(string(skillDoc), "tool-git-evidence", "evidence"))
+	put(t, filepath.Join(c.repo, "contract/local-access.json"),
+		`{"schema_version":1,"tools":{"evidence":{"method":"cli","availability":"Requires Git."}}}`)
+	put(t, filepath.Join(root, "tool/evidence/SKILL.md"),
+		"---\nname: evidence\ndescription: Synthetic evidence tool.\n---\n\nEvidence.\n")
+	must(t, os.Remove(filepath.Join(dir, "dag-contract.schema.json")))
+	path := filepath.Join(dir, "DAG.yaml")
+	body, err := os.ReadFile(path)
+	must(t, err)
+	doc := strings.Replace(string(body), "  - id: experiment\n",
+		"  - id: experiment\n    capabilities: [evidence]\n", 1)
+	put(t, path, doc)
+	nodes, err := validate(c, root)
+	must(t, err)
+	if strings.Join(nodes["dag-review"].Hints, ",") != "evidence" {
+		t.Fatalf("missing stage-to-tool graph edge: %+v", nodes["dag-review"])
+	}
+	if nodes["evidence"].Execution == nil || nodes["evidence"].Execution.Method != "cli" {
+		t.Fatal("tool execution method is missing from the graph")
+	}
+	put(t, path, strings.Replace(doc, "[evidence]", "[missing-tool]", 1))
+	if _, err = validate(c, root); err == nil {
+		t.Fatal("dangling stage Capability passed validation")
+	}
+}

@@ -2,12 +2,13 @@ package core
 
 import (
 	"embed"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 )
 
-//go:embed skill-validate.sh dag-validate.sh tool-contract-validate.sh metadata-validate.py
+//go:embed skill-validate.sh dag-validate.sh dag-contract.schema.json tool-contract-validate.sh metadata-validate.py
 var validatorAssets embed.FS
 
 // 배포 작업의 전용 임시 디렉터리에 빌드에 포함된 검증기를 푼다.
@@ -36,7 +37,11 @@ func prepareValidators(c *config, stage string) error {
 	return nil
 }
 
-func validatorRun(c config, interpreter, name string, args ...string) (resultErr error) {
+func validatorRun(c config, interpreter, name string, args ...string) error {
+	return validatorStart(c, interpreter, name, nil, args...)
+}
+
+func validatorStart(c config, interpreter, name string, output io.Writer, args ...string) (resultErr error) {
 	if c.validatorDir == "" {
 		stage, err := os.MkdirTemp(c.state, "stage-validator-")
 		if err != nil {
@@ -49,6 +54,7 @@ func validatorRun(c config, interpreter, name string, args ...string) (resultErr
 	}
 	cmd := exec.Command(interpreter, append([]string{filepath.Join(c.validatorDir, name)}, args...)...)
 	cmd.Dir = c.validatorDir
+	cmd.Stdout = output
 	cmd.Env = append(os.Environ(), "TMPDIR="+c.validatorDir, "BASH_ENV=/dev/null")
 	return cmd.Run()
 }

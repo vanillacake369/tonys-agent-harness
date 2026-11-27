@@ -16,9 +16,10 @@ type graphOptions struct {
 	depth                           int
 }
 type graphNode struct {
-	ID     string `json:"id"`
-	Kind   string `json:"kind"`
-	Origin string `json:"origin,omitempty"`
+	ID        string      `json:"id"`
+	Kind      string      `json:"kind"`
+	Origin    string      `json:"origin,omitempty"`
+	Execution *toolAccess `json:"execution,omitempty"`
 }
 type graphEdge struct {
 	From string `json:"from"`
@@ -197,6 +198,7 @@ func graphBuild(nodes map[string]node, o graphOptions) (graphView, error) {
 		entry := graphNode{ID: from, Kind: n.Kind}
 		if runtime {
 			entry.Origin = n.Origin
+			entry.Execution = n.Execution
 		}
 		v.Nodes = append(v.Nodes, entry)
 		v.Edges = append(v.Edges, graphEdges(nodes, from, n.Requires, "requires")...)

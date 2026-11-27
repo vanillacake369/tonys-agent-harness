@@ -61,4 +61,12 @@ reject boolean_schema_version '.schema_version = true'
 reject wrong_id '.id = "fake"' SOURCE_MAPPING
 reject legacy_source '.source = "skills/candidates/dag-review/SKILL.md"' PATTERN_AT_dag_source
 
-printf '%s\n' 'DAG_FIXTURES=PASS (1 positive contract; 12 rejected unsafe or incomplete variants)'
+schema="$root/core/dag-contract.schema.json"
+reject dangling_skip '(.nodes[] | select(.id == "experiment")) |= (.on_skip = "ghost" | .skip_if = "missing")' \
+  INVALID_SKIP_experiment
+reject incomplete_skip '(.nodes[] | select(.id == "experiment") | .on_skip) = "conclusion"' \
+  INCOMPLETE_SKIP_experiment
+reject cyclic_skip '(.nodes[] | select(.id == "experiment")) |= (.on_skip = "intake" | .skip_if = "again")' \
+  INVALID_SKIP_experiment
+
+printf '%s\n' 'DAG_FIXTURES=PASS (1 positive contract; 15 rejected unsafe or incomplete variants)'

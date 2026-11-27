@@ -118,6 +118,8 @@ func runtimeAgentProfile(c config, target, id, description string) error {
 	body += fmt.Sprintf("Read the [role profile](<%s>) and [policy](<%s>).\n", profile, policy)
 	body += "This is a role skill, not a native subagent. " +
 		"Delegate only when the provider supports it and authority permits.\n"
+	body += "Resolve required capabilities for the task, then use optional hints where relevant. " +
+		"Verify the actual tool or provider before claiming execution.\n"
 	body += "Otherwise use sequential role passes and disclose that limitation.\n"
 	return os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(body), 0600)
 }

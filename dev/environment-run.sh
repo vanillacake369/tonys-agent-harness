@@ -38,7 +38,8 @@ while IFS= read -r file || [[ -n "$file" ]]; do
     [[ "$file" != */*/* && "$file" != */.* ]] || exit 1
     case "$file" in
     flake.nix | flake.lock | go.mod | go.sum | main.go | core/environment-public.txt) ;;
-    core/*.go | core/*.sh | core/*.txtar | core/metadata-validate.py | cli/*.go | cli/*.txt | config/*.go | \
+    core/*.go | core/*.sh | core/*.txtar | core/dag-contract.schema.json | core/metadata-validate.py | \
+        cli/*.go | cli/*.txt | config/*.go | \
         source/*.go) ;;
     provider/*.go | provider/*.nix | provider/*.json | dev/*.bats | dev/*.go | dev/*.sh | dev/*.justfile | dev/*.nix | \
         dev/vendor-hash.txt | contract/*.json) ;;

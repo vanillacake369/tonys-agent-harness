@@ -16,6 +16,7 @@ core/capability-validate_test.go
 core/cli-blackbox_test.go
 core/config-reconcile.go
 core/config-reconcile_test.go
+core/dag-contract.schema.json
 core/dag-validate.sh
 core/dag-validate_test.sh
 core/environment-public.txt
