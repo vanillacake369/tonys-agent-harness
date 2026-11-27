@@ -456,34 +456,44 @@ func sourceCachePath(c config, s source) string {
 	return filepath.Join(c.state, "source-cache", hashBytes([]byte(key)))
 }
 
-func sourceResolve(c config, s source, target string) (resultErr error) {
+func sourceResolve(c config, s source, target string) error {
 	cache := sourceCachePath(c, s)
 	if !exists(cache) {
+		fetch := func(tree string) error { return sourceFetch(c, s, tree) }
 		if s.ReviewedTree == "" {
-			return sourceFetch(c, s, target)
+			return fetch(target)
 		}
-		stage, err := os.MkdirTemp(c.state, "stage-reviewed-source-")
-		if err != nil {
-			return err
-		}
-		defer cleanupPath(&resultErr, stage)
-		tree := filepath.Join(stage, "skill")
-		if err = sourceFetch(c, s, tree); err != nil {
-			return err
-		}
-		if err = verifySourceTree(tree, s.ReviewedTree, ""); err != nil {
-			return err
-		}
-		return os.Rename(tree, target)
+		return sourceSnapshot(c, target, s.ReviewedTree, "", fetch)
 	}
-	tree, err := reviewedSourceCache(cache, s.ReviewedTree)
+	cached, err := sourceCacheDigest(cache)
 	if err != nil {
 		return err
 	}
-	return copyTree(tree, target)
+	copyCached := func(tree string) error { return copyTree(filepath.Join(cache, "skill"), tree) }
+	return sourceSnapshot(c, target, s.ReviewedTree, cached, copyCached)
 }
 
-func reviewedSourceCache(cache, reviewed string) (string, error) {
+// 캐시와 네트워크에서 복사한 후보 자체의 digest를 확인한 뒤 후보 경로를 공개한다.
+func sourceSnapshot(c config, target, reviewed, cached string, materialize func(string) error) (resultErr error) {
+	stage, err := os.MkdirTemp(c.state, "stage-reviewed-source-")
+	if err != nil {
+		return err
+	}
+	defer cleanupPath(&resultErr, stage)
+	tree := filepath.Join(stage, "skill")
+	if err = materialize(tree); err != nil {
+		return err
+	}
+	if err = verifySourceTree(tree, reviewed, cached); err != nil {
+		return err
+	}
+	if exists(target) {
+		return errors.New("source snapshot target already exists")
+	}
+	return os.Rename(tree, target)
+}
+
+func sourceCacheDigest(cache string) (string, error) {
 	if err := privateDirCheck(cache); err != nil {
 		return "", err
 	}
@@ -495,8 +505,7 @@ func reviewedSourceCache(cache, reviewed string) (string, error) {
 	if !sourceCacheNamePattern.MatchString(cached) {
 		return "", errors.New("invalid source cache digest")
 	}
-	tree := filepath.Join(cache, "skill")
-	return tree, verifySourceTree(tree, reviewed, cached)
+	return cached, nil
 }
 
 func verifySourceTree(tree, reviewed, cached string) error {
@@ -516,8 +525,11 @@ func verifySourceTree(tree, reviewed, cached string) error {
 func sourceCacheSave(c config, s source, tree string) (resultErr error) {
 	var cache = sourceCachePath(c, s)
 	if exists(cache) {
-		_, err := reviewedSourceCache(cache, s.ReviewedTree)
-		return err
+		cached, err := sourceCacheDigest(cache)
+		if err != nil {
+			return err
+		}
+		return verifySourceTree(filepath.Join(cache, "skill"), s.ReviewedTree, cached)
 	}
 	var parent = filepath.Dir(cache)
 	if err := privateDir(parent); err != nil {
