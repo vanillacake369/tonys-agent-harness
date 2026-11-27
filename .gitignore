@@ -4,6 +4,7 @@
 /*.age
 /*.enc
 /.sealed-*
+/.harness-vault-*.lock
 /result*
 
 /bin/

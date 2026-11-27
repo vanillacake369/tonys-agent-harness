@@ -34,7 +34,22 @@ func recordWorkspaceBase(c config) error {
 	if err != nil {
 		return err
 	}
+	return writeWorkspaceBase(c, fingerprint)
+}
+
+func writeWorkspaceBase(c config, fingerprint string) error {
 	return atomicWrite(workspaceBasePath(c), []byte(fingerprint+"\n"))
+}
+
+func verifyArchiveFingerprint(c config, fingerprint string) error {
+	current, err := currentArchiveFingerprint(c)
+	if err != nil {
+		return err
+	}
+	if fingerprint != current {
+		return errors.New("vault changed since workspace opened; preserve workspace and reconcile before applying")
+	}
+	return nil
 }
 
 func checkWorkspaceBase(c config) error {
@@ -51,18 +66,11 @@ func checkWorkspaceBase(c config) error {
 	if err != nil {
 		return err
 	}
-	current, err := currentArchiveFingerprint(c)
-	if err != nil {
-		return err
-	}
-	if strings.TrimSpace(string(data)) != current {
-		return errors.New("vault changed since workspace opened; preserve workspace and reconcile before applying")
-	}
-	return nil
+	return verifyArchiveFingerprint(c, strings.TrimSpace(string(data)))
 }
 
 type config struct {
-	repo, state, workspace, runtime, archive, key string
+	repo, state, workspace, runtime, archive, key, validatorDir string
 }
 
 // 체크아웃과 평문 저장 경계를 분리하고 사용자 전용 디렉터리를 확보한다.
@@ -163,7 +171,23 @@ func operationLock(c config) (*os.File, error) {
 	if err := privateDir(c.state); err != nil {
 		return nil, err
 	}
-	path := filepath.Join(c.state, "operation.lock")
+	return openOperationLock(filepath.Join(c.state, "operation.lock"))
+}
+
+// 작업 공간 잠금 다음에 획득한다. 암호문을 교체해도 잠금의 inode를 유지한다.
+func vaultOperationLock(c config) (*os.File, error) {
+	parent := filepath.Dir(c.archive)
+	real, err := filepath.EvalSymlinks(parent)
+	if err != nil {
+		return nil, err
+	}
+	if parent != real {
+		return nil, errors.New("symlink vault parent")
+	}
+	return openOperationLock(filepath.Join(parent, ".harness-vault-"+filepath.Base(c.archive)+".lock"))
+}
+
+func openOperationLock(path string) (*os.File, error) {
 	fd, err := syscall.Open(path, syscall.O_CREAT|syscall.O_RDWR|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0600)
 	if err != nil {
 		return nil, err
@@ -174,7 +198,8 @@ func operationLock(c config) (*os.File, error) {
 		f.Close()
 		return nil, err
 	}
-	if !info.Mode().IsRegular() || info.Mode().Perm() != 0600 || info.Sys().(*syscall.Stat_t).Nlink != 1 {
+	stat := info.Sys().(*syscall.Stat_t)
+	if !info.Mode().IsRegular() || info.Mode().Perm() != 0600 || stat.Nlink != 1 || stat.Uid != uint32(os.Getuid()) {
 		f.Close()
 		return nil, errors.New("unsafe operation lock")
 	}

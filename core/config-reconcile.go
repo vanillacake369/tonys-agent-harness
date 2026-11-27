@@ -97,7 +97,7 @@ func initialize(c config, args []string) (resultErr error) {
 	if err = os.Rename(root, c.workspace); err != nil {
 		return err
 	}
-	return recordWorkspaceBase(c)
+	return writeWorkspaceBase(c, "absent")
 }
 
 func emptyTree(root string) error {
@@ -208,8 +208,16 @@ func reconcileWithOptions(c config, cmd string, jsonOutput, quiet, verbose bool)
 		}
 		return nil
 	}
-	if exists(c.workspace) {
+	var editing = exists(c.workspace)
+	var archiveBase string
+	if editing {
 		if err := checkWorkspaceBase(c); err != nil {
+			return err
+		}
+	} else {
+		var err error
+		archiveBase, err = currentArchiveFingerprint(c)
+		if err != nil {
 			return err
 		}
 	}
@@ -218,6 +226,9 @@ func reconcileWithOptions(c config, cmd string, jsonOutput, quiet, verbose bool)
 		return err
 	}
 	defer cleanupPath(&resultErr, stage)
+	if err = prepareValidators(&c, stage); err != nil {
+		return err
+	}
 	root := filepath.Join(stage, "capability")
 	before, err := materialize(c, root)
 	if err != nil {
@@ -237,10 +248,13 @@ func reconcileWithOptions(c config, cmd string, jsonOutput, quiet, verbose bool)
 		}
 	}
 	if cmd == "unlock" {
+		if err = verifyArchiveFingerprint(c, archiveBase); err != nil {
+			return err
+		}
 		if err = os.Rename(root, c.workspace); err != nil {
 			return err
 		}
-		if err = recordWorkspaceBase(c); err != nil {
+		if err = writeWorkspaceBase(c, archiveBase); err != nil {
 			return err
 		}
 		if !quiet {
@@ -268,7 +282,8 @@ func reconcileWithOptions(c config, cmd string, jsonOutput, quiet, verbose bool)
 	}
 	return deploy(c, deployment{
 		stage: stage, root: root, nodes: nodes, plain: after, before: before,
-		changed: changed, plan: cmd == "plan", editing: exists(c.workspace), jsonOutput: jsonOutput, verbose: verbose,
+		changed: changed, plan: cmd == "plan", editing: editing, jsonOutput: jsonOutput, verbose: verbose,
+		archiveBase: archiveBase,
 	})
 }
 
@@ -284,7 +299,19 @@ func deploymentNodes(c config, root string) (map[string]node, error) {
 편집본의 변경 여부를 확인하고 왕복 검증된 암호문을 먼저 저장한다.
 저장 전후 편집본이 달라졌다면 원본을 삭제하지 않는다.
 */
-func lockCommit(c config, stage string, before, after []byte) error {
+func lockCommit(c config, stage string, before, after []byte) (resultErr error) {
+	lock, err := vaultOperationLock(c)
+	if err != nil {
+		return err
+	}
+	defer func() { resultErr = errors.Join(resultErr, lock.Close()) }()
+	if err = checkWorkspaceBase(c); err != nil {
+		return err
+	}
+	baseline, err := readRegular(workspaceBasePath(c))
+	if err != nil {
+		return err
+	}
 	current, err := pack(c.workspace)
 	if err != nil {
 		return err
@@ -308,7 +335,12 @@ func lockCommit(c config, stage string, before, after []byte) error {
 		same = bytes.Equal(data, after)
 	}
 	if !same {
-		if err = seal(c, after); err != nil {
+		if err = seal(c, after, strings.TrimSpace(string(baseline))); err != nil {
+			return err
+		}
+	}
+	if same {
+		if err = verifyArchiveFingerprint(c, strings.TrimSpace(string(baseline))); err != nil {
 			return err
 		}
 	}
@@ -326,7 +358,7 @@ func lockCommit(c config, stage string, before, after []byte) error {
 }
 
 type deployment struct {
-	stage, root                                 string
+	stage, root, archiveBase                    string
 	nodes                                       map[string]node
 	plain, before                               []byte
 	changed, plan, editing, jsonOutput, verbose bool
@@ -409,14 +441,19 @@ func deploy(c config, d deployment) error {
 
 // apply는 열린 편집본도 명시적으로 저장하고 배포한다.
 // Runtime 후보 검증 후에만 암호문을 교체한다.
-func commitDeployment(c config, d deployment) error {
+func commitDeployment(c config, d deployment) (resultErr error) {
 	if d.editing {
 		return lockCommit(c, d.stage, d.before, d.plain)
 	}
-	if d.changed {
-		return seal(c, d.plain)
+	if !d.changed {
+		return nil
 	}
-	return nil
+	lock, err := vaultOperationLock(c)
+	if err != nil {
+		return err
+	}
+	defer func() { resultErr = errors.Join(resultErr, lock.Close()) }()
+	return seal(c, d.plain, d.archiveBase)
 }
 
 // 편집기를 정상 종료한 경우에만 저장과 배포를 진행한다.

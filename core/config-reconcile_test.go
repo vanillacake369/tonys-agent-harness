@@ -134,7 +134,8 @@ func TestDeploymentCandidateRunsOneFullValidation(t *testing.T) {
 	fixtureTree(t, c.workspace)
 	put(t, filepath.Join(c.workspace, "skill/fixture/SKILL.md"),
 		"# Fixture\n\n```json composition\n{\"requires\":[],\"hints\":[]}\n```\n")
-	put(t, filepath.Join(c.repo, "core/skill-validate.sh"),
+	c.validatorDir = filepath.Join(c.repo, "core")
+	put(t, filepath.Join(c.validatorDir, "skill-validate.sh"),
 		"#!/bin/sh\nprintf x >> \"$HARNESS_VALIDATOR_LOG\"\n")
 	log := filepath.Join(c.state, "validator.log")
 	t.Setenv("HARNESS_VALIDATOR_LOG", log)
@@ -213,5 +214,62 @@ func TestSetupEmptyIntegration(t *testing.T) {
 	}
 	if exists(c.archive) || exists(filepath.Join(c.runtime, "skills")) {
 		t.Fatal("empty setup activated persistent state")
+	}
+}
+
+func TestLockCommitRechecksWorkspaceBase(t *testing.T) {
+	c := fixtureConfig(t)
+	fixtureTree(t, c.workspace)
+	must(t, recordWorkspaceBase(c))
+	snapshot, err := pack(c.workspace)
+	must(t, err)
+	put(t, c.archive, "new archive")
+	err = lockCommit(c, c.state, snapshot, snapshot)
+	if err == nil || !strings.Contains(err.Error(), "vault changed since workspace opened") {
+		t.Fatalf("unexpected commit result: %v", err)
+	}
+	if !exists(c.workspace) {
+		t.Fatal("concurrent change lost the workspace")
+	}
+}
+
+func TestTwoWorkspacesShareVaultLockIntegration(t *testing.T) {
+	integrationOnly(t)
+	for _, tool := range []string{"age-keygen", "sops"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			t.Skip("missing " + tool)
+		}
+	}
+	first, second := fixtureConfig(t), fixtureConfig(t)
+	first.key = filepath.Join(filepath.Dir(first.key), "keys", "identity")
+	must(t, keyGenerate(first))
+	second.archive, second.key = first.archive, first.key
+	fixtureTree(t, first.workspace)
+	fixtureTree(t, second.workspace)
+	must(t, recordWorkspaceBase(first))
+	must(t, recordWorkspaceBase(second))
+	snapshot, err := pack(second.workspace)
+	must(t, err)
+
+	lock, err := vaultOperationLock(first)
+	must(t, err)
+	err = lockCommit(second, second.state, snapshot, snapshot)
+	must(t, lock.Close())
+	if err == nil || !strings.Contains(err.Error(), "operation busy") {
+		t.Fatalf("concurrent writer was not blocked: %v", err)
+	}
+	must(t, reconcile(first, "sync"))
+	written, err := readRegular(first.archive)
+	must(t, err)
+	err = lockCommit(second, second.state, snapshot, snapshot)
+	if err == nil || !strings.Contains(err.Error(), "vault changed") {
+		t.Fatalf("stale second workspace was not rejected: %v", err)
+	}
+	workspace, err := pack(second.workspace)
+	must(t, err)
+	cipher, err := readRegular(first.archive)
+	must(t, err)
+	if !bytes.Equal(snapshot, workspace) || !bytes.Equal(written, cipher) {
+		t.Fatal("rejected writer changed workspace or ciphertext")
 	}
 }

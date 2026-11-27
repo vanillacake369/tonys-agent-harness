@@ -70,22 +70,11 @@ func writeSkillDraft(path, id string) error {
 }
 
 /*
-단일 Skill 검증은 신뢰된 체크아웃의 검증기만 실행한다.
+단일 Skill 검증은 빌드에 포함된 검증기를 실행한다.
 Vault나 Runtime을 열지 않고 후보 디렉터리만 읽는다.
 */
-func (Application) ValidateSkill(path string) error {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	repo, err := repositoryRoot(cwd)
-	if err != nil {
-		return err
-	}
-	if !exists(filepath.Join(repo, "core/environment-public.txt")) {
-		return errors.New("validator requires a Harness checkout; use --repo")
-	}
-	path, err = filepath.Abs(path)
+func (Application) ValidateSkill(path string) (resultErr error) {
+	path, err := filepath.Abs(path)
 	if err != nil {
 		return err
 	}
@@ -97,11 +86,19 @@ func (Application) ValidateSkill(path string) error {
 	if _, err = run("python3", "-c", "import yaml"); err != nil {
 		return errors.New("skill validation requires Python 3 with PyYAML")
 	}
-	if _, err = run("bash", filepath.Join(repo, "core/skill-validate.sh"), path); err != nil {
+	stage, err := os.MkdirTemp("", "harness-skill-validator-")
+	if err != nil {
+		return err
+	}
+	defer cleanupPath(&resultErr, stage)
+	var c config
+	if err = prepareValidators(&c, stage); err != nil {
+		return err
+	}
+	if err = contractCheck(c, "skill-validate.sh", path); err != nil {
 		return errors.New("skill structure validation failed; check frontmatter, links, and files")
 	}
-	metadata := filepath.Join(repo, "core/metadata-validate.py")
-	if _, err = run("python3", metadata, "skill", path); err != nil {
+	if err = validatorRun(c, "python3", "metadata-validate.py", "skill", path); err != nil {
 		return errors.New("v2.1 skill metadata validation failed; check kind, behavior, title and agents/openai.yaml")
 	}
 	doc, err := readRegular(filepath.Join(path, "SKILL.md"))

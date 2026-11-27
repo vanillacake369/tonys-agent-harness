@@ -19,7 +19,8 @@ func TestNodesReadRunsIndependentValidatorsConcurrently(t *testing.T) {
 	barrier := filepath.Join(c.state, "validator-barrier")
 	must(t, os.Mkdir(barrier, 0700))
 	t.Setenv("HARNESS_VALIDATOR_BARRIER", barrier)
-	put(t, filepath.Join(c.repo, "core/skill-validate.sh"), `#!/bin/sh
+	c.validatorDir = filepath.Join(c.repo, "core")
+	put(t, filepath.Join(c.validatorDir, "skill-validate.sh"), `#!/bin/sh
 set -eu
 touch "$HARNESS_VALIDATOR_BARRIER/$(basename "$1")"
 attempt=0

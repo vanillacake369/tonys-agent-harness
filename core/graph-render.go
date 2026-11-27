@@ -91,6 +91,9 @@ func graphRead(c config, o graphOptions, w io.Writer) (resultErr error) {
 		return err
 	}
 	defer cleanupPath(&resultErr, stage)
+	if err = prepareValidators(&c, stage); err != nil {
+		return err
+	}
 	root := filepath.Join(stage, "capability")
 	if _, err = materialize(c, root); err != nil {
 		return err

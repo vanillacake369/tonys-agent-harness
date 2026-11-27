@@ -78,3 +78,13 @@ func TestSkillAuthoringIntegration(t *testing.T) {
 		t.Fatal("skill authoring initialized Harness state")
 	}
 }
+
+func TestSkillValidationWithoutCheckoutIntegration(t *testing.T) {
+	integrationOnly(t)
+	root := temp(t)
+	app := NewApplication()
+	path, err := app.ScaffoldSkill("skill/skl-pre-fixture-ljh", root)
+	must(t, err)
+	t.Setenv("HARNESS_REPO", filepath.Join(root, "absent-checkout"))
+	must(t, app.ValidateSkill(path))
+}

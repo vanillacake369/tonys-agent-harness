@@ -44,6 +44,7 @@ core/terminal-darwin.go
 core/terminal-linux.go
 core/tool-contract-validate.sh
 core/tool-contract-validate_test.sh
+core/validation-assets.go
 core/vault-crypto.go
 core/vault-crypto_test.go
 core/workspace-edit.go

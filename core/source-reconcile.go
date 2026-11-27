@@ -320,9 +320,9 @@ func (s source) importTarget(root, sourceName, original string) (string, error) 
 이름 변환에 실패하면 후보는 폐기되고 현재 Runtime은 유지된다.
 */
 func (s source) finishImport(c config, target, name, path string) error {
-	cmd := exec.Command("python3", filepath.Join(c.repo, "core", "metadata-validate.py"),
+	err := validatorRun(c, "python3", "metadata-validate.py",
 		"import-name", filepath.Join(target, "SKILL.md"), filepath.Base(path), filepath.Base(target))
-	if err := cmd.Run(); err != nil {
+	if err != nil {
 		return fmt.Errorf("could not set imported name for %s/%s", name, filepath.Base(path))
 	}
 	return sourceProvenance(target, name, s, path)
@@ -358,6 +358,9 @@ func pinSource(c config, args []string) (resultErr error) {
 		return err
 	}
 	defer cleanupPath(&resultErr, tmp)
+	if err = prepareValidators(&c, tmp); err != nil {
+		return err
+	}
 	if err = sourceResolve(c, s, filepath.Join(tmp, "skill")); err != nil {
 		return err
 	}

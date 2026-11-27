@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -48,15 +47,8 @@ func idValid(s string) bool { return len(s) <= 64 && idPattern.MatchString(s) }
 
 // 기존 엄격한 YAML/Tool 검증기를 임시 호환 계층으로 유지한다.
 // 검증 중 Skill 스크립트나 외부 네트워크는 실행하지 않는다.
-func contractCheck(c config, script string, args ...string) (resultErr error) {
-	cmd := exec.Command("bash", append([]string{filepath.Join(c.repo, "core", script)}, args...)...)
-	tmp, err := os.MkdirTemp(c.state, "stage-validator-")
-	if err != nil {
-		return err
-	}
-	defer cleanupPath(&resultErr, tmp)
-	cmd.Env = append(os.Environ(), "TMPDIR="+tmp)
-	if err := cmd.Run(); err != nil {
+func contractCheck(c config, script string, args ...string) error {
+	if err := validatorRun(c, "bash", script, args...); err != nil {
 		return errors.New(script + " failed (private details suppressed)")
 	}
 	return nil
@@ -385,8 +377,7 @@ func catalogValidate(c config, root string) error {
 	if !exists(filepath.Join(root, "catalog.json")) {
 		return nil
 	}
-	var cmd = exec.Command("python3", filepath.Join(c.repo, "core/metadata-validate.py"), "catalog", root)
-	if err := cmd.Run(); err != nil {
+	if err := validatorRun(c, "python3", "metadata-validate.py", "catalog", root); err != nil {
 		return errors.New("catalog validation failed; regenerate catalog and retry")
 	}
 	return nil

@@ -139,7 +139,7 @@ harness skill new skl-mid-milestone-cycle-ljh --output ./drafts
 harness skill validate ./drafts/skl-mid-milestone-cycle-ljh
 ```
 
-다른 프로젝트에서 검증할 때는 `harness --repo /path/to/tonys-agent-harness skill validate <skill-dir>`를 사용합니다.
+빌드에 포함된 검증기를 사용하므로 다른 프로젝트에서도 `harness skill validate <skill-dir>`로 검사합니다.
 단일 스킬 검증은 파일 구조, v2.1 메타데이터와 composition 선언을 검사합니다.
 다른 Capability 참조의 존재와 순환 여부는 Workspace 전체의 `harness apply --dry-run`에서 확인합니다.
 카탈로그를 관리하는 번들에 추가하는 경우 해당 번들의 카탈로그도 재생성합니다.
@@ -255,6 +255,8 @@ harness provider disconnect codex
   Git이나 공개 Nix 입력에 절대 포함되지 않습니다.
 - **엄격한 Source 검증:** 외부 Source는 HTTPS 기반 GitHub URL과 검토된 Full
   Commit SHA만 허용합니다.
+- **검증기 출처:** CLI 빌드에 포함된 검증기를 사용합니다. 선택한 설정 체크아웃의 검증기 파일은 개발용입니다.
+- **동시 저장 방지:** 한 Vault를 여러 Workspace에서 열 수 있습니다. 저장 시 같은 Vault 잠금을 사용하고 저장 직전에 기준값을 확인합니다.
 - **무실행 검증:** 검증 과정 중 사용자의 Skill 스크립트, 플러그인, OAuth, Hook
   등을 절대 임의로 실행하거나 설치하지 않습니다.
 - **안전한 롤백 보장:** 후보 검증에 실패하면 기존의 암호화 데이터(Ciphertext)와
